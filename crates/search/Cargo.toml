@@ -1,0 +1,68 @@
+[package]
+name = "search"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Embedding-backed literature search (RRF fusion, rerank, vec store)."
+
+# Standalone extraction: the daily-memory / knowledge-base (`kb`) path —
+# HybridSearchService, kb_index, watcher, manifest, Qdrant migration — was NOT
+# vendored. It depended on alzina-memory (→ alzina-workspace) + notify/fs2/
+# qdrant-client, none of which ship here. Those always-off `kb`-gated modules
+# have been removed; only the literature-synthesis path remains.
+
+[dependencies]
+base = { workspace = true }
+# (KB-only dep alzina-memory removed in the standalone extraction — the `kb`
+# modules that used it are compiled out.)
+async-trait = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
+# sqlite-vec ships its C source as a Rust crate. The crate exposes the
+# `sqlite3_vec_init` C entry point, which we register via
+# `sqlite3_auto_extension` from `libsqlite3-sys` so every connection sqlx
+# opens has the `vec0` virtual-table module available. We deliberately do
+# NOT depend on `rusqlite` — that would conflict with sqlx's
+# `libsqlite3-sys` linkage.
+sqlite-vec = "0.1"
+# `bundled` statically links a known-good SQLite from the amalgamation
+# instead of dlopen'ing the system one. Without this, on macOS the system
+# SQLite's auto-extension hook does not see `sqlite3_vec_init`, so every
+# sqlx connection opens without `vec0` and the daemon boots with
+# "no such module: vec0" + degraded search. The bundled build also
+# guarantees the SAME SQLite library object is linked once for both
+# `sqlite-vec` and `sqlx-sqlite`, so `sqlite3_auto_extension` registers
+# on the same library every connection opens against.
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+toml = "0.8"
+tracing = { workspace = true }
+uuid = { workspace = true }
+# (KB-only deps notify/fs2/qdrant-client removed in the standalone extraction —
+# the watcher/manifest/qdrant_migration modules that used them are compiled out.)
+# Phase 21 Plan 02: ar5iv HTML section parsing (CSS selectors over html5ever).
+# Package Legitimacy Audit in 21-RESEARCH.md marks this Approved:
+# crates.io age 2016, 19.4M downloads, github.com/rust-scraper/scraper.
+scraper = "0.27.0"
+# Phase 21 Plan 02: arxiv Atom XML parsing. Already in workspace (0.31).
+quick-xml = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "test-util"] }
+wiremock = "0.6"
+# Phase 21 Plan 05: seeded unit-vector generation for the 100k benchmark.
+# `small_rng` gives SmallRng explicitly — previously it arrived only via the
+# kb dependency chain's feature unification, so the lit_vec_bench test broke
+# under `--no-default-features`.
+rand = { workspace = true, features = ["small_rng"] }
+# Phase 21 Plan 05: fan-out benchmark uses futures::future::join_all to
+# collect N=10 concurrent tokio::spawn handles in one await.
+futures = "0.3"

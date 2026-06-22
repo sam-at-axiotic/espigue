@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  MATURIN_WORKDIR: crates/litreview-cli
+  MATURIN_WORKDIR: crates/cli
 
 jobs:
   linux:

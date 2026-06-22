@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/alzina-core",
-    "crates/alzina-search",
-    "crates/alzina-orchestration",
-    "crates/litreview-cli",
+    "crates/base",
+    "crates/search",
+    "crates/orchestration",
+    "crates/cli",
 ]
 
 [workspace.package]
@@ -17,7 +17,7 @@ publish = false
 # only — the daemon/runner/governance/memory/workspace crates are NOT vendored;
 # the `runner` (orchestration) and `kb` (search) features that depended on them
 # are stripped here.
-alzina-core = { path = "crates/alzina-core" }
+base = { path = "crates/base" }
 
 # External dependencies
 uuid = { version = "1", features = ["v4", "serde"] }

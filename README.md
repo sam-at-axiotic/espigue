@@ -40,7 +40,7 @@ review is a small, queryable knowledge graph of its field.
 Five complete, unedited example reviews — `.md` prose plus full `.synthesis.yaml`
 — are in **[examples/reviews/](examples/reviews/)**. Full documentation and the
 design of the three-stage pipeline are in the package README:
-**[crates/litreview-cli/README.md](crates/litreview-cli/README.md)**.
+**[crates/cli/README.md](crates/cli/README.md)**.
 
 ## Repository layout
 
@@ -49,18 +49,18 @@ wheel via maturin (`bindings = "bin"`).
 
 | Crate | Role |
 | --- | --- |
-| `crates/litreview-cli` | The `litreview` binary + the synthesis pipeline (`run_review`) |
-| `crates/alzina-orchestration` | Test-time-diffusion synthesis engine (TTD + adapter) |
-| `crates/alzina-search` | Literature search — RRF fusion, reranking, the vec store |
-| `crates/alzina-core` | Shared types, error taxonomy, trait definitions |
+| `crates/cli` | The `litreview` binary + the synthesis pipeline (`run_review`) |
+| `crates/orchestration` | Test-time-diffusion synthesis engine (TTD + adapter) |
+| `crates/search` | Literature search — RRF fusion, reranking, the vec store |
+| `crates/base` | Shared types, error taxonomy, trait definitions |
 
 ## Build from source
 
 ```bash
-cargo build --release -p litreview-cli      # → target/release/litreview
+cargo build --release -p cli      # → target/release/litreview
 # or build the wheel:
 pip install maturin
-cd crates/litreview-cli && maturin build --release
+cd crates/cli && maturin build --release
 ```
 
 ## Related project
