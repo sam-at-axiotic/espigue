@@ -5,7 +5,8 @@ Topic in, cited literature review out.
 `espigue` is a standalone command-line tool that turns a research question into
 a structured, citation-grounded literature review. It searches arXiv and Semantic
 Scholar (and your own documents), grounds every claim in retrieved sources, and
-synthesises a review that surfaces the *tensions* in a field rather than a flat
+surfaces a field's **areas of disagreement and open gaps** — then uses them to
+drive further, targeted literature search, rather than flattening them into a
 summary. One `OPENROUTER_API_KEY` drives generation, embeddings, and reranking.
 
 ## What it produces
@@ -31,10 +32,10 @@ hand-editing — this is the tool's output.
 > majority carry over to reasoning systems where outputs vary stochastically and
 > participants are non-adversarial.
 
-The full review continues for several thousand words, organised as a
-*problem-lattice* of competing hypotheses with per-claim author-year citations and
-a complete bibliography. Every cited paper is a real source the tool retrieved and
-read, not a model recollection — and every citation and quote is mechanically
+The full review continues for several thousand words, with per-claim author-year
+citations and a complete bibliography. (This is the long-form `v3` profile — one
+of several output shapes; see [`--profile`](#how-it-works).) Every cited paper is
+a real source the tool retrieved and read, not a model recollection — and every citation and quote is mechanically
 verified against that source text (see [Why the output is
 trustworthy](#why-the-output-is-trustworthy)).
 
@@ -58,7 +59,7 @@ export S2_API_KEY=...                        # optional — adds the Semantic Sc
 
 espigue "test-time compute scaling for language models"
 #   → synthesis.yaml   (the structured review + bibliography)
-#   → graph.md         (the claim/tension graph)
+#   → graph.md         (the claim/argument graph)
 ```
 
 That is the whole happy path. arXiv needs no key; without `S2_API_KEY` the tool
@@ -142,15 +143,16 @@ Three stages, one command:
 2. **Draft — evolve, don't sample.** A small population of drafts is written in
    parallel, each by a different expert persona. Over fixed rounds they improve
    under selection pressure: adversarial judges score each draft against a rubric,
-   its weakest points are exposed as *gaps*, the retriever pulls fresh evidence for
-   each gap, and the draft is rewritten to close them. A hard validity gate culls
-   any draft that drifts from its sources. The fittest survivor moves on.
-3. **Merge.** A stronger model fuses the surviving drafts into a single review
-   structured around the field's tensions, with author-year citations and a
-   bibliography.
+   its weakest points and unresolved disagreements are exposed as *gaps*, the
+   retriever pulls fresh evidence for each gap, and the draft is rewritten to close
+   them. A hard validity gate culls any draft that drifts from its sources. The
+   fittest survivor moves on.
+3. **Merge.** A stronger model fuses the surviving drafts into a single review that
+   surfaces the field's disagreements and open questions instead of smoothing them
+   into false consensus, with author-year citations and a bibliography.
 
 Choose the depth with `--profile`: `v1`/`delphi` (concise), `v2`/`lit-review`, or
-`v3`/`lit-review-long` (the long-form, tension-first format shown above).
+`v3`/`lit-review-long` (the long-form, sectioned format shown above).
 
 ### The draft stage is an evolutionary search
 
@@ -192,8 +194,8 @@ which are the defaults.)
 
 On top of that floor sits quality tuning. Reviews are scored by an LLM judge
 against a calibrated, per-dimension rubric — grounding, citation faithfulness,
-tension coverage, and argument structure are graded separately rather than rolled
-into one vibe score. Dead or redundant dimensions were pruned by running the judge
+disagreement coverage, and argument structure are graded separately rather than
+rolled into one vibe score. Dead or redundant dimensions were pruned by running the judge
 across many corpora and dropping the ones that did not discriminate. The generator
 is tuned against measurable quality, not just a prompt that sounds confident.
 
