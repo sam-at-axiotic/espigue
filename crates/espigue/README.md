@@ -64,6 +64,41 @@ espigue "test-time compute scaling for language models"
 That is the whole happy path. arXiv needs no key; without `S2_API_KEY` the tool
 runs on arXiv plus any local documents you ingest.
 
+`pip install espigue` is all you need — the wheel ships a self-contained compiled
+binary, so there is **no Rust toolchain to install and no Python runtime
+dependencies**. It is a normal `pip install` that drops the `espigue` command on
+your `PATH`.
+
+### From Python
+
+espigue is a CLI, but it is built to drive from Python: `pip install` it, call it
+with `subprocess`, and load the structured `synthesis.yaml` — the review as data.
+
+```python
+import subprocess, yaml
+
+# The wheel put `espigue` on PATH. Run a review like any other command:
+subprocess.run(
+    ["espigue", "consensus mechanisms in multi-agent LLM systems", "--out", "."],
+    check=True,
+)
+
+# synthesis.yaml is plain YAML — load it and work with the structured review:
+review = yaml.safe_load(open("synthesis.yaml"))
+
+for claim in review["claims"]:
+    print(claim["support_level"], claim["evidence_grade"], "—", claim["text"])
+    for q in claim["quotes"]:
+        if q["status"] == "verified":            # mechanically verified quote
+            print("   ✓", q["source"], "—", q["text"][:80])
+
+print("open gaps:", [g["gap_type"] for g in review["gaps"]])
+```
+
+Every field — claims, verified quotes, agreements/disagreements, gaps — is in that
+YAML (see [The structured output](#the-structured-output)), so a few lines of
+Python turn a review into a dataset you can filter, score, or feed onward.
+
 ### Bring your own corpus
 
 ```bash

@@ -31,6 +31,11 @@ espigue "test-time compute scaling for language models"
 #   → synthesis.yaml + graph.md
 ```
 
+**Built for Python users.** `pip install espigue` ships a self-contained binary —
+no Rust toolchain, no runtime dependencies. Drive it from a Python script with
+`subprocess` and load the structured `synthesis.yaml`; a few lines turn a review
+into a dataset. See [From Python](crates/espigue/README.md#from-python).
+
 Each review is also emitted as a `synthesis.yaml` — the review as data, not just
 prose: every claim carries its sources, evidence grade, support level, method,
 lineage, and mechanically verified quotes, and the field's agreements,
