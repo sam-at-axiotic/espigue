@@ -1,6 +1,6 @@
 # Example reviews
 
-Five real, unedited gna outputs. Each was generated from a single research
+Five real, unedited espigue outputs. Each was generated from a single research
 question with the `v3/lit-review-long` profile — no hand-editing. They are a
 knowledge base on multi-agent LLM systems, each review built around the *tensions*
 in its corner of the field with per-claim author-year citations and a full
@@ -32,5 +32,5 @@ trustworthy](../../crates/cli/README.md#why-the-output-is-trustworthy).
 To generate your own:
 
 ```bash
-gna "shared memory and state management in multi-agent LLM systems"
+espigue "shared memory and state management in multi-agent LLM systems"
 ```

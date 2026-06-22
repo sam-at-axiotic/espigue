@@ -1,4 +1,4 @@
-//! `gna` — standalone literature-review synthesis CLI.
+//! `espigue` — standalone literature-review synthesis CLI.
 //!
 //! Topic in, cited literature review out. One `OPENROUTER_API_KEY` drives
 //! generation, embeddings, and reranking; `S2_API_KEY` (optional) enables the
@@ -6,9 +6,9 @@
 //!
 //! ```text
 //! export OPENROUTER_API_KEY=sk-or-...
-//! gna "test-time compute scaling"        # → synthesis.yaml + graph.md
-//! gna ingest ./papers/                    # index local docs
-//! gna --scope corpus-only "my question"   # cite only local docs
+//! espigue "test-time compute scaling"        # → synthesis.yaml + graph.md
+//! espigue ingest ./papers/                    # index local docs
+//! espigue --scope corpus-only "my question"   # cite only local docs
 //! ```
 
 use std::path::PathBuf;
@@ -25,10 +25,10 @@ use cli::pipeline::{
 
 /// Standalone literature-review synthesis over OpenRouter + arXiv (+ optional S2).
 #[derive(Parser, Debug)]
-#[command(name = "gna", version, about)]
+#[command(name = "espigue", version, about)]
 struct Cli {
     /// The research question to synthesise a review for. Omit when using a
-    /// subcommand (e.g. `gna ingest ./papers/`).
+    /// subcommand (e.g. `espigue ingest ./papers/`).
     question: Option<String>,
 
     /// Subcommand (e.g. `ingest`). When absent, runs a review of QUESTION.
@@ -37,7 +37,7 @@ struct Cli {
 
     // ── Shared (review + ingest both open the same DB / embedder) ──────────
     /// Literature DB path (created if missing).
-    #[arg(long, default_value = "gna.db", global = true)]
+    #[arg(long, default_value = "espigue.db", global = true)]
     db: PathBuf,
 
     /// Embedding model slug.
@@ -161,7 +161,7 @@ async fn run_ingest(dir: &std::path::Path, ctx: &LitContext) -> anyhow::Result<(
     );
     if stats.pdftotext_missing {
         eprintln!(
-            "gna: pdftotext not found — PDFs were skipped. Install poppler:\n\
+            "espigue: pdftotext not found — PDFs were skipped. Install poppler:\n\
              \tmacOS:  brew install poppler\n\
              \tDebian: apt install poppler-utils"
         );
@@ -177,7 +177,7 @@ async fn run_ingest(dir: &std::path::Path, ctx: &LitContext) -> anyhow::Result<(
 
 async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<()> {
     let question = cli.question.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("no question given (usage: gna \"your question\", or `gna ingest <dir>`)")
+        anyhow::anyhow!("no question given (usage: espigue \"your question\", or `espigue ingest <dir>`)")
     })?;
 
     let profile = parse_prompt_profile(cli.profile.as_deref()).map_err(|e| anyhow::anyhow!(e))?;
@@ -185,13 +185,13 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<()> {
 
     if scope == Scope::CorpusPlusWeb && !ctx.s2_enabled() {
         eprintln!(
-            "gna: S2_API_KEY not set — Semantic Scholar lane disabled (arXiv + local only)."
+            "espigue: S2_API_KEY not set — Semantic Scholar lane disabled (arXiv + local only)."
         );
     }
 
     if !cli.seed_papers.is_empty() && scope == Scope::CorpusOnly {
         eprintln!(
-            "gna: --seed-papers with --scope corpus-only — seeds will be fetched, but \
+            "espigue: --seed-papers with --scope corpus-only — seeds will be fetched, but \
              gap-fill stays local-only."
         );
     }

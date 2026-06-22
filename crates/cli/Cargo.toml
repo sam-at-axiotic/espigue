@@ -7,7 +7,7 @@ license = "Apache-2.0"
 description = "Standalone literature-review synthesis CLI (OpenRouter-backed)"
 
 [[bin]]
-name = "gna"
+name = "espigue"
 path = "src/main.rs"
 
 [dependencies]

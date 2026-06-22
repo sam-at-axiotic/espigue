@@ -1,8 +1,8 @@
-# gna
+# espigue
 
 Topic in, cited literature review out.
 
-`gna` is a standalone command-line tool that turns a research question into
+`espigue` is a standalone command-line tool that turns a research question into
 a structured, citation-grounded literature review. It searches arXiv and Semantic
 Scholar (and your own documents), grounds every claim in retrieved sources, and
 synthesises a review built around the *tensions* in a field. One
@@ -25,9 +25,9 @@ with the bulk of the reasoning on Haiku. Defaults ship `gemini-2.5-flash` for
 drafts; pass `--model anthropic/claude-haiku-4.5` to reproduce the tested setup.
 
 ```bash
-pip install gna
+pip install espigue
 export OPENROUTER_API_KEY=sk-or-...
-gna "test-time compute scaling for language models"
+espigue "test-time compute scaling for language models"
 #   → synthesis.yaml + graph.md
 ```
 
@@ -49,7 +49,7 @@ wheel via maturin (`bindings = "bin"`).
 
 | Crate | Role |
 | --- | --- |
-| `crates/cli` | The `gna` binary + the synthesis pipeline (`run_review`) |
+| `crates/cli` | The `espigue` binary + the synthesis pipeline (`run_review`) |
 | `crates/orchestration` | Test-time-diffusion synthesis engine (TTD + adapter) |
 | `crates/search` | Literature search — RRF fusion, reranking, the vec store |
 | `crates/base` | Shared types, error taxonomy, trait definitions |
@@ -57,7 +57,7 @@ wheel via maturin (`bindings = "bin"`).
 ## Build from source
 
 ```bash
-cargo build --release -p cli      # → target/release/gna
+cargo build --release -p cli      # → target/release/espigue
 # or build the wheel:
 pip install maturin
 cd crates/cli && maturin build --release
@@ -65,7 +65,7 @@ cd crates/cli && maturin build --release
 
 ## Related project
 
-gna is a sibling of [Symphonia](https://arc-yh.nihr.ac.uk/research/projects/symphonia-llm-assisted-expert-consensus-platform/),
+espigue is a sibling of [Symphonia](https://arc-yh.nihr.ac.uk/research/projects/symphonia-llm-assisted-expert-consensus-platform/),
 an LLM-assisted expert-consensus platform, and shares its synthesis engine with
 [`axiotic-ai/consensus`](https://github.com/axiotic-ai/consensus) — the original
 Python implementation of the test-time-diffusion consensus method ported here.
