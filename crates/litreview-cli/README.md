@@ -38,6 +38,9 @@ read, not a model recollection — and every citation and quote is mechanically
 verified against that source text (see [Why the output is
 trustworthy](#why-the-output-is-trustworthy)).
 
+Five more complete, unedited reviews — a small knowledge base on multi-agent LLM
+systems — are in [`examples/reviews/`](../../examples/reviews/).
+
 litreview has been evaluated end-to-end with **Haiku driving the expert draft
 swarm and a single Opus 4.8 call to merge**. The surprising result is how much of
 this quality holds when the bulk of the reasoning runs on Haiku, with just one

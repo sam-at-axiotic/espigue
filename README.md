@@ -31,8 +31,10 @@ litreview "test-time compute scaling for language models"
 #   → synthesis.yaml + graph.md
 ```
 
-Full documentation, a real generated review, and the design of the three-stage
-pipeline are in the package README: **[crates/litreview-cli/README.md](crates/litreview-cli/README.md)**.
+Five complete, unedited example reviews — a knowledge base on multi-agent LLM
+systems — are in **[examples/reviews/](examples/reviews/)**. Full documentation
+and the design of the three-stage pipeline are in the package README:
+**[crates/litreview-cli/README.md](crates/litreview-cli/README.md)**.
 
 ## Repository layout
 
