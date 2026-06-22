@@ -31,9 +31,15 @@ litreview "test-time compute scaling for language models"
 #   → synthesis.yaml + graph.md
 ```
 
-Five complete, unedited example reviews — a knowledge base on multi-agent LLM
-systems — are in **[examples/reviews/](examples/reviews/)**. Full documentation
-and the design of the three-stage pipeline are in the package README:
+Each review is also emitted as a `synthesis.yaml` — the review as data, not just
+prose: every claim carries its sources, evidence grade, support level, method,
+lineage, and mechanically verified quotes, and the field's agreements,
+disagreements, uncertainties, and open research gaps are first-class lists. Each
+review is a small, queryable knowledge graph of its field.
+
+Five complete, unedited example reviews — `.md` prose plus full `.synthesis.yaml`
+— are in **[examples/reviews/](examples/reviews/)**. Full documentation and the
+design of the three-stage pipeline are in the package README:
 **[crates/litreview-cli/README.md](crates/litreview-cli/README.md)**.
 
 ## Repository layout

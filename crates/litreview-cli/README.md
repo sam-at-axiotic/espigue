@@ -162,6 +162,34 @@ into one vibe score. Dead or redundant dimensions were pruned by running the jud
 across many corpora and dropping the ones that did not discriminate. The generator
 is tuned against measurable quality, not just a prompt that sounds confident.
 
+## The structured output
+
+`synthesis.yaml` is not just the review as text — it is the review as data. The
+prose (`graph.md`) is one rendering of it; everything behind that prose is present
+in machine-readable form:
+
+- **Claims**, each a structured record: the claim and its author-year citation,
+  the sources behind it, a `support_level` (converging / established / contested),
+  an `evidence_grade`, the `method` the evidence came from, the `year`, and a
+  `lineage` line tracing who first showed it and who corroborated.
+- **Verified quotes** per claim — the verbatim sentence, its source, the source
+  node it resolves to, and a `status` (`verified` / `snapped` / `paraphrased` /
+  `absent`) from the mechanical check above.
+- **The shape of the field** as first-class lists: `areas_of_agreement`,
+  `areas_of_disagreement`, `uncertainties`, and `minority_reports` — not buried in
+  prose.
+- **`narrative_statements`**, mapping each sentence of the review back to the
+  claims it rests on — sentence-level traceability from prose to evidence.
+- **`gaps`** — the open research questions the synthesis surfaced, each typed
+  `empirical` / `methodological` / `theoretical`.
+- A provenance header (`model`, `prompt_version`, `code_version`, `generated_at`)
+  so any review reproduces.
+
+Each review is therefore a small, queryable knowledge graph of a field: you can
+sort claims by evidence grade, pull only the contested ones, or follow any quote
+back to its source. The five [`examples/reviews/`](../../examples/reviews/) ship
+their full `synthesis.yaml` alongside the rendered review.
+
 ## A growing corpus you own
 
 litreview keeps a persistent local store (`litreview.db`). Every paper it

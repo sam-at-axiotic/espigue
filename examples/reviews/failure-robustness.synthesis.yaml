@@ -1,0 +1,534 @@
+schema_version: '2.0'
+study_id: synthesize-97e2fdac
+round_id: r1
+question_id: f717e9ad-f154-4904-93ea-2f0a3c09fb09
+generated_at: 2026-06-17T17:17:46.542035Z
+model: claude-haiku-4-5-20251001
+prompt_version: v3/lit-review-long
+code_version: 98617d5
+claims:
+- text: Failures in LLM-based multi-agent systems manifest as soft semantic deviations — hallucinations, ambiguous interpretations, reasoning drift — that propagate silently without runtime exceptions, distinguishing them from the explicit crashes and timeouts of traditional distributed systems whose protocols are deterministic rather than natural-language-mediated.
+  agreement_level: null
+  sources:
+  - arxiv:2602.19843
+  - arxiv:2606.07941
+  - arxiv:2606.07937
+  counterarguments: []
+  support_level: established
+  evidence_grade: strong
+  method: conceptual framing grounded in fault-injection study and hallucination-cascade experiments
+  year: '2026'
+  lineage: framed by arxiv:2602.19843 (2026); corroborated by arxiv:2606.07941 and arxiv:2606.07937 (2026)
+  quotes:
+  - source: arxiv:2602.19843
+    text: as MAS transition from experimental prototypes to mission-critical components in production environments, their reliability and fault tolerance become paramount concerns
+    status: verified
+    node_id: arxiv:2602.19843_C1
+  node_refs:
+  - arxiv:2602.19843_C1
+  citation: (Jia et al., 2026; Jamshidi, 2026; Jamshidi et al., 2026)
+- text: Single-step execution errors propagate through agent interactions and amplify into cascading, system-wide failures that can be modeled as an ignition-and-spread process, making root-cause attribution and cascade modeling prerequisites for improving reliability.
+  agreement_level: null
+  sources:
+  - arxiv:2602.19843
+  - arxiv:2606.03467
+  - arxiv:2603.04474
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: fault-injection analysis plus explicit cascade modeling and mitigation experiments
+  year: '2026'
+  lineage: argued by arxiv:2602.19843 and arxiv:2606.03467 (2026); cascade dynamics modeled by arxiv:2603.04474 (2026)
+  quotes:
+  - source: arxiv:2606.03467
+    text: LLM-based multi-agent systems exhibit remarkable collaborative capabilities in complex multi-step tasks. However, these systems are highly sensitive to single-step execution errors that can propagate through agent interactions and lead to cascading failures.
+    status: verified
+    node_id: arxiv:2606.03467_C1
+  node_refs:
+  - arxiv:2606.03467_C1
+  citation: (Jia et al., 2026; Zhu et al., 2026; Xie et al., 2026)
+- text: The MAS-FIRE framework grounds a taxonomy of 15 fault types via systematic fault injection into three MAS systems (MetaGPT, Table-Critic, Camel) with execution-log analysis and inter-rater coding, anchoring fault classification beyond outcome metrics.
+  agreement_level: null
+  sources:
+  - arxiv:2602.19843
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: systematic fault injection across three MAS with execution-log analysis and inter-rater coding
+  year: '2026'
+  lineage: introduced by arxiv:2602.19843 (2026)
+  quotes:
+  - source: arxiv:2602.19843
+    text: as MAS transition from experimental prototypes to mission-critical components in production environments, their reliability and fault tolerance become paramount concerns
+    status: verified
+    node_id: arxiv:2602.19843_C1
+  node_refs:
+  - arxiv:2602.19843_C1
+  citation: (Jia et al., 2026)
+- text: 'Defenses stratify by level: Mechanism-Level filters (automated retries, syntax parsers) absorb execution-layer noise — achieving occurrence rates ≥85% and 100% local recovery for parameter-filling, tool-format, and tool-selection errors — but semantic faults pierce these filters and demand Reasoning-Level cognitive redundancy, which itself fails when an agent maintains its role yet cannot recognize an upstream input as erroneous.'
+  agreement_level: null
+  sources:
+  - arxiv:2602.19843
+  - arxiv:2509.14285
+  - arxiv:2511.22924
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: fault-injection evaluation measuring occurrence, local recovery, and final success rates by defense tier
+  year: '2026'
+  lineage: shown by arxiv:2602.19843 (2026); consistent with arxiv:2509.14285 and arxiv:2511.22924
+  quotes:
+  - source: arxiv:2602.19843
+    text: Mechanism-Level defenses (e.g., automated retries, syntax parsers) function as a filter for low-level errors within MAS. By effectively handling execution-layer noise, these mechanisms prevent low-level errors from propagating into the cognitive context of agents, ensuring the accuracy of historical information within high-level reasoning processes.
+    status: verified
+    node_id: arxiv:2602.19843_F6
+  node_refs:
+  - arxiv:2602.19843_F6
+  citation: (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025)
+- text: StepFinder performs step-level failure attribution by using LLMs only during feature construction to encode execution logs into temporal semantic sequences, then applying parameter-efficient temporal-modeling and attention modules to capture cross-step dependencies, achieving a 79% inference-time reduction versus the fastest LLM-based attributor with no text-generation overhead; constrained temporal-hierarchical designs pursue the same temporal structuring to stabilize MAS over long horizons.
+  agreement_level: null
+  sources:
+  - arxiv:2606.03467
+  - arxiv:2601.10738
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  year: '2026'
+  lineage: StepFinder introduced by arxiv:2606.03467 (2026); related temporal-hierarchical stabilization by arxiv:2601.10738 (2026)
+  quotes:
+  - source: arxiv:2606.03467
+    text: To address this, we propose StepFinder, a lightweight failure attribution framework. We use LLMs solely during the feature construction phase to encode execution logs into temporal semantic sequences. Subsequently, a parameter-efficient combination of temporal modeling and attention modules is applied to capture the sequential evolution and cross-step dependencies of the trajectories.
+    status: verified
+    node_id: arxiv:2606.03467_C2
+  node_refs:
+  - arxiv:2606.03467_C2
+  citation: (Zhu et al., 2026; Jardine, 2026)
+- text: Many MAS failure modes are not evident from single-agent logs and emerge only when considering cross-agent dependencies, imposing a structural visibility constraint on failure diagnosis that motivates trajectory-level attribution over agent-first analysis; temporal graph modeling of the evolving collaboration structure operationalizes this cross-agent visibility for safeguarding.
+  agreement_level: null
+  sources:
+  - arxiv:2605.17467
+  - arxiv:2602.19843
+  - arxiv:2505.19234
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: trajectory-level attribution analysis contrasted with agent-first prediction; temporal graph modeling of agent collaborations
+  year: '2025'
+  lineage: argued by arxiv:2605.17467 and arxiv:2602.19843 (2025–2026); temporal-graph safeguarding by arxiv:2505.19234 (2025)
+  quotes:
+  - source: arxiv:2605.17467
+    text: LLM-based guard models have recently been studied as lightweight classifiers for monitoring and filtering model misbehaviors
+    status: verified
+    node_id: arxiv:2605.17467_C1
+  node_refs:
+  - arxiv:2605.17467_C1
+  citation: (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025)
+- text: Outcome-level metrics (binary success/failure) treat MAS as a black box and obscure internal propagation and recovery; LLM-based guard models deployed as lightweight, non-invasive black-box classifiers offer a complementary route to monitor and filter semantic misbehavior at runtime without instrumenting internal states.
+  agreement_level: null
+  sources:
+  - arxiv:2605.17467
+  - arxiv:2602.19843
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: guard-model deployment as taxonomy-guided classifiers over interaction trajectories
+  year: '2025'
+  lineage: proposed by arxiv:2605.17467 (2025); motivated by black-box critique in arxiv:2602.19843 (2026)
+  quotes:
+  - source: arxiv:2605.17467
+    text: LLM-based guard models have recently been studied as lightweight classifiers for monitoring and filtering model misbehaviors
+    status: verified
+    node_id: arxiv:2605.17467_M1
+  node_refs:
+  - arxiv:2605.17467_M1
+  citation: (Qiao et al., 2026; Jia et al., 2026)
+- text: Root-cause identification in MAS can be formalized as finding the earliest decision point in an execution trace whose correction would prevent the observed error state, reframing attribution away from joint agent-error prediction toward trace-level causal localization; online cross-channel causal monitoring extends this to detect and attribute cascade attacks as they unfold.
+  agreement_level: null
+  sources:
+  - arxiv:2603.14688
+  - arxiv:2604.17658
+  - arxiv:2605.19240
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: trace-level causal localization formalism; cross-channel causal monitoring for online detection and attribution
+  year: '2026'
+  lineage: formalized by arxiv:2603.14688 and arxiv:2604.17658 (2026); online causal attribution by arxiv:2605.19240 (2026)
+  node_refs:
+  - arxiv:2603.14688
+  citation: (Wang, 2026; Li et al., 2026; Venkatesh et al., 2026)
+- text: Hallucination in multi-agent settings is a dynamic process shaped by interaction history, cascade depth, and model heterogeneity rather than a static property of an isolated output, with unsupported claims, inconsistencies, and factual incorrectness exhibiting distinct propagation signatures across sequential agent interactions.
+  agreement_level: null
+  sources:
+  - arxiv:2606.07937
+  - arxiv:2606.07941
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: 500 cascade experiments across 10 domains tracking claim-level factual inconsistencies through agent chains
+  year: '2026'
+  lineage: shown by arxiv:2606.07937 and arxiv:2606.07941 (2026)
+  quotes:
+  - source: arxiv:2606.07937
+    text: Large Language Models (LLMs) generate fluent text but remain vulnerable to hallucinations, producing unsupported, inconsistent, and factually incorrect claims. Most prior work treats hallucination as
+    status: verified
+    node_id: arxiv:2606.07937_C1
+  node_refs:
+  - arxiv:2606.07937_C1
+  citation: (Jamshidi et al., 2026; Jamshidi, 2026)
+- text: Under Blind Trust attacks with systematically false instructions, GPT-5 achieved 6.32% task success while DeepSeek-V3 reached 70.61%, indicating a capability inversion in which superior instruction-following compels stricter compliance with corrupted directives and thereby reduces robustness.
+  agreement_level: null
+  sources:
+  - arxiv:2602.19843
+  - arxiv:2511.17621
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: fault-injection under Blind Trust attack measuring per-model task success
+  year: '2026'
+  lineage: reported by arxiv:2602.19843 (2026); consistent with arxiv:2511.17621
+  quotes:
+  - source: arxiv:2602.19843
+    text: Mechanism-Level defenses (e.g., automated retries, syntax parsers) function as a filter for low-level errors within MAS. By effectively handling execution-layer noise, these mechanisms prevent low-level errors from propagating into the cognitive context of agents, ensuring the accuracy of historical information within high-level reasoning processes.
+    status: verified
+    node_id: arxiv:2602.19843_F6
+  node_refs:
+  - arxiv:2602.19843_F6
+  citation: (Jia et al., 2026; Gho et al., 2025)
+- text: Mitigation efficacy depends on non-technical factors including deployment cost and compliance requirements, causing widely-used capability leaderboards to fail as predictors of operational utility when these constraints are jointly active.
+  agreement_level: null
+  sources:
+  - arxiv:2512.23487
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: analysis of mitigation utility under cost and compliance constraints
+  year: '2025'
+  lineage: argued by arxiv:2512.23487 (2025)
+  node_refs:
+  - arxiv:2512.23487
+  citation: (Digalakis et al., 2025)
+areas_of_agreement:
+- Single-step errors cascade through agent interactions into system-wide failures, and root-cause attribution is a prerequisite for reliability.
+- Cross-agent, trajectory-level evidence is necessary because many failures are invisible in single-agent logs.
+- Temporal structure — sequences, hierarchies, graphs — is the shared substrate for both efficient attribution and online cascade monitoring.
+areas_of_disagreement:
+- Whether attribution should be framed as joint agent-error prediction or as trace-level causal localization of the earliest correctable decision point.
+- Whether stronger general capability improves MAS robustness; the Blind Trust capability inversion (GPT-5 6.32% vs DeepSeek-V3 70.61%) shows instruction-following can reduce robustness under corrupted directives.
+uncertainties:
+- Whether cascade attenuation observed in hallucination chains (amplification factor 0.644) generalizes beyond 3-agent chains and the studied model mix.
+- How lightweight temporal attributors and guard models trade off accuracy against the loss of intermediate reasoning relative to full-trajectory LLM analysis.
+- Whether online cross-channel causal monitoring scales to large agent populations without prohibitive instrumentation cost.
+minority_reports: []
+narrative: |-
+  ## Introduction
+
+  LLM-based multi-agent systems promise distributed reasoning across specialized roles and collaborative refinement of solutions. Yet deployment reveals a structural reliability problem that breaks inherited mental models from traditional distributed systems. When a node crashes or a message is corrupted in a conventional system, the failure announces itself through explicit exceptions, timeouts, or consensus failures. Detection is deterministic; mitigation draws on decades of protocol design. By contrast, LLM-mediated agent interactions fail silently and semantically. A hallucinated fact, an ambiguous interpretation of a delegated task, or reasoning drift within an agent's internal state produces syntactically valid outputs that propagate downstream without triggering any runtime exception. The system continues operating while the solution degrades, and by the time the error surfaces in final output, its origin point has vanished into the interaction history.
+
+  This distinction reshapes the diagnosis and defense problem fundamentally. When failures are soft semantic deviations rather than hard protocol violations, the entire apparatus of failure detection and recovery must be rebuilt. Single-agent introspection fails. Outcome-level metrics obscure internal cascade propagation. Capability—the primary lever by which the field has improved LLM reliability—appears to cut both ways: it can amplify robustness or, counterintuitively, increase vulnerability under certain adversarial conditions (Jia et al., 2026; Gho et al., 2025; Digalakis et al., 2025). These tensions define the current state of the literature.
+
+  The field is split on three overlapping axes. First, how should practitioners and researchers attribute failure causation in systems where errors cascade silently across agent boundaries? Two incompatible framings compete: joint agent-error prediction, which asks "which agent made the mistake?", and trace-level causal localization, which asks "what is the earliest correctable decision point in the execution trace?" These are not equivalent questions; they lead to different tools, different defenses, and different deployment strategies (Jia et al., 2026; Zhu et al., 2026; Xie et al., 2026; Qiao et al., 2026; Zhou et al., 2025). Second, does stronger instruction-following fidelity predict better robustness? Emerging evidence suggests the opposite: superior instruction-following compels stricter compliance with corrupted directives, producing a capability inversion wherein models ranked highest in general capability become more vulnerable under adversarial or contaminated input conditions. Under Blind Trust attacks, GPT-5 achieved only 6.32% task success while DeepSeek-V3 reached 70.61%—a reversal that contradicts the assumption that stronger capability improves robustness and problematizes widely-used capability leaderboards as predictors of operational utility (Jia et al., 2026; Gho et al., 2025; Digalakis et al., 2025). Third, failures are not visible in single-agent logs; many error modes emerge only when considering cross-agent dependencies, input-output coupling, and message flow. This visibility constraint motivates trace-level attribution over agent-first analysis, yet the means to operationalize cross-agent visibility remain partial and contested (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025).
+
+  This review maps these tensions as a problem-lattice: not a convergence toward unified truth, but a structured space of competing framings, evidence clusters, and unresolved trade-offs. Rather than dissolving these tensions, the review renders them visible, clarifies the trade-offs and constraints that structure them, and shows what design consequences follow from choosing one path over another. The focal question is: How should practitioners and researchers diagnose, attribute, and defend against failure propagation in LLM-based multi-agent systems when failures are semantically soft, cascade across agent boundaries, and may defy the assumption that stronger capability improves robustness?
+
+  The argument organizes around two planted tensions that unfold across sections. The first—the failure attribution framing divide (T1)—asks whether failure diagnosis should target agent-level error prediction or trace-level causal localization; the evidence supporting each will be presented, their consequences for system design clarified, and resolution will remain partial. The second—the capability inversion phenomenon (T2)—exposes a deeper inversion: superior instruction-following fidelity may increase vulnerability under corrupted directives, forcing a reckoning with the assumption that capability and robustness align. Both tensions are rooted in executable evidence—fault injection experiments, temporal-attribution models, attack studies, and cascade propagation measurements in deployed or simulated systems. Both carry implications for how practitioners build and monitor LLM-based multi-agent systems, and both reflect structural features of the problem rather than temporary gaps in current solutions.
+
+  ## Soft failures and silent propagation: why failures elude deterministic monitoring
+
+  The foundational insight distinguishing LLM-based multi-agent systems from traditional distributed systems is not that they fail—all systems do—but the *nature* of their failures and the conditions under which failures propagate. In a deterministic distributed system, a failed computation either halts with a clear signal (an exception, a timeout, a consensus abort) or produces a bitwise-exact output that can be verified against a specification. Correctness is binary. When an anomaly occurs, the protocol itself defines when and how to detect it.
+
+  LLM-mediated agent interactions operate under radically different conditions. Each agent is a language model constrained by natural-language prompts and trained to generate continuations that maximize statistical likelihood rather than satisfy formal specifications. A soft semantic deviation occurs when an agent outputs text that is syntactically well-formed, parses successfully as valid JSON or structured code, and produces no runtime exception, yet is semantically misaligned with the intent of the query or the state of the system (Jia et al., 2026; Jamshidi, 2026; Jamshidi et al., 2026). These deviations take multiple forms: hallucinations (factually false claims presented with confidence), ambiguous interpretations (plausible but unintended readings of instructions), and reasoning drift (internal reasoning that diverges from the task objective while maintaining coherent-sounding justifications). Critically, none of these trigger explicit failures. The system continues. The hallucinated fact propagates to the next agent. The misinterpreted instruction shapes the next action. The drift compounds.
+
+  This silent propagation is not a flaw in individual LLMs—it is a structural consequence of natural-language mediation. Unlike a formal API call with a schema-defined request and response, agent-to-agent communication occurs through prose. When Agent B receives a message from Agent A, it must interpret that message through the statistical learned patterns of its language model, constrained by its system prompt and prior context. That interpretation is not deterministically verified against Agent A's intent—there is no oracle confirming semantic alignment. Agent B proceeds with whatever understanding it has formed. If that understanding is subtly wrong, Agent B's actions will be wrong, and the error will cascade. An agent receiving a hallucinated fact does not flag it as malformed; it accepts it as a premise for its own reasoning. An agent receiving an ambiguous instruction may resolve the ambiguity differently than upstream agents intended. A reasoning drift in one agent becomes the starting assumption for the next. The system has no built-in protocol to reject these inputs, because the protocol *itself* is semantically mediated.
+
+  The cross-agent visibility constraint emerges directly from this architecture (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025). To detect failures, observers must see not only what each agent does, but how those outputs couple into the next agent's inputs and how that agent interprets and acts on them. A failure mode that manifests only in the interaction between Agent A's output and Agent B's interpretation will not appear in either agent's log in isolation. It emerges only when both logs are read together, and only if the observer knows what to look for. Single-agent logs are structurally blind to multi-agent interaction failures. An agent may produce perfectly coherent text, yet that text may mislead the downstream agent in ways neither agent's internal state reveals. An individual agent's output trace may show no anomaly; the anomaly appears only in the divergence between what Agent B receives and what Agent A intended to communicate. System-level diagnosis requires trajectory-level visibility—examination of execution sequences and interaction dependencies, not individual steps. Temporal structure becomes a diagnostic primitive: the sequence of agent interactions, their ordering, and the feedback loops they create must be examined together to reveal the point at which semantic alignment broke.
+
+  This visibility constraint has immediate consequences for practitioners deploying LLM-based multi-agent systems in production. It means that outcome-level metrics—did the system succeed or fail?—are insufficient for improvement. Outcome tells you that something went wrong, not what went wrong or where. It means that capability metrics derived from single-agent benchmarks (instruction-following, factuality, reasoning) do not fully predict multi-agent system reliability, because they do not measure the interaction surface where failures often originate. It means that traditional distributed-systems observability—logs, traces, metrics—must be augmented with semantic-aware instrumentation. Practitioners cannot diagnose multi-agent LLM failures by introspecting individual agent traces alone. They must adopt a trajectory-level, cross-agent perspective from the outset. Mechanism-level filters—syntax checkers, format validators, type checkers—cannot see into soft semantic deviations because deviations do not violate syntax or format. A soft semantic deviation is precisely an error that passes all deterministic, local checks and is caught only by checking semantic coherence, factuality, or alignment with intent. This is why mechanism-level defenses are necessary but insufficient, and why the field has turned to reasoning-level approaches and trajectory-level attribution as essential complements.
+
+  ## Cascade propagation: modeling failure amplification across agent boundaries
+
+  Where single-step errors originate, the system's structure determines whether they remain localized or amplify into system-wide cascades. In LLM-based multi-agent systems, the evidence converges on a clear finding: single-step execution errors propagate through agent interactions and amplify into cascading, system-wide failures that can be modeled as an ignition-and-spread process (Jia et al., 2026; Zhu et al., 2026; Xie et al., 2026). This is not a claim about the frequency of cascades, but about the mechanism: when an error occurs in one agent's reasoning or output, it becomes input to the next agent. The next agent treats that input as truth (absent robust verification) and builds upon it. If the input was erroneous, the next agent's output is also likely erroneous, but potentially more severe, because it now incorporates both the original error and the next agent's interpretation and elaboration of it. The error has not just propagated; it has amplified.
+
+  The ignition-and-spread metaphor captures this process precisely. In the ignition phase, a single agent generates a soft semantic deviation—a hallucination, an incorrect tool selection, a misinterpreted instruction—with no exception and no immediate signal of failure. The downstream agent receives this output as input, treating it as ground truth or at minimum as a plausible working assumption. The error has crossed an agent boundary and entered the system state. In the spread phase, downstream agents use the corrupted output to inform their own reasoning, make decisions that depend on it, and pass refined—or compounded—versions to subsequent agents. A hallucination about a tool's parameters propagates into a cascade of tool invocations with wrong inputs. An ambiguous interpretation of a task goal propagates into a sequence of steps aimed at the wrong objective. The amplification is not linear; it follows an accumulation pattern in which each agent that touches the error adds its own uncertainty, misinterpretation, or compounding deviation. Whether a cascade reaches system-wide failure depends on how far the error spreads before being caught or absorbed.
+
+  Understanding this amplification process is more than academic. It is the prerequisite for improving reliability at scale. If errors amplified without bound, no multi-agent system would be reliable beyond trivial depths. If errors remained perfectly localized, single-agent hardening would suffice. In practice, the amplification is conditional: it depends on the error type, the agent roles, the task structure, and the verification mechanisms in place. Some errors stay local; others cascade. Understanding which is which—modeling the ignition-and-spread process—is the foundation for building resilient systems. Root-cause failure attribution and cascade modeling are therefore prerequisites for improvement: you cannot design better defenses without understanding which errors cascade, under what conditions, and what systemic properties determine amplification.
+
+  The field has taken a first systematic step toward this modeling through fault injection and taxonomic grounding. The MAS-FIRE framework injects systematically defined faults into three representative multi-agent systems (MetaGPT, Table-Critic, Camel), observes their propagation via execution-log analysis, and classifies the results through inter-rater coding (Jia et al., 2026). This approach moves beyond outcome metrics. Rather than asking only "did the system succeed?", it asks "what types of errors occur, and what is their signature in the execution trace?" The framework grounds a taxonomy of 15 distinct fault types in empirical observation of real systems, anchoring fault classification beyond intuition and revealing that "failure" is not a monolithic phenomenon. Some faults are execution-layer errors: a tool call has the wrong format, a parameter is missing, a function signature is violated. Others are semantic: an agent misunderstands the intent of a query, interprets an ambiguous instruction in an unintended way, or drifts in its reasoning while maintaining internal coherence. Still others are interaction-level: Agent A's output is syntactically correct and semantically sound in isolation, but mismatches the expectations or current state of Agent B, causing Agent B to fail downstream.
+
+  The implications for cascade modeling are significant. If all faults were execution-layer, detection and recovery would be straightforward: syntax checkers catch the error, retries or fallback mechanisms fix it, propagation stops. But semantic and interaction-level faults evade these mechanisms. A reasoning drift within an agent's internal state produces outputs that are syntactically valid, semantically plausible, and therefore accepted by the downstream agent without alarm. The drift amplifies. By the time system-level degradation is obvious, the error has cascaded across multiple agent steps. Fault injection reveals which error types trigger cascades and which remain localized, which agent boundaries are permeable to which kinds of errors, and what the early-warning signs of a cascade might be. The cascade dynamics depend on the system's architecture, the agents' roles, and the depth of coupling between steps. A parameter-selection error in one agent might be contained if downstream agents validate tool inputs; the same error might cascade if downstream agents assume inputs are correct.
+
+  Modeling cascade propagation therefore requires understanding not just whether an error occurred, but at what level—execution, semantic, or interaction—and how that level determines the error's visibility and amplification signature. The MAS-FIRE taxonomy provides a first vocabulary for this conversation, shifting the field from anecdotal failure reports toward a systematic inventory of what can go wrong. But moving from taxonomy to predictive cascade models—forecasting which single-step errors will cascade and by how much—remains an open challenge that demands continued empirical study of cascade patterns across diverse agent architectures and task structures.
+
+  ## Mechanism-level versus reasoning-level defenses: stratification and gaps
+
+  Given that errors cascade and amplify through multi-agent systems, how do current defenses respond? The evidence reveals a clear stratification: mechanism-level defenses absorb execution-layer noise with high effectiveness, but soft semantic deviations bypass these filters, creating a defensive gap that reasoning-level redundancy attempts to fill—incompletely (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+
+  Mechanism-level defenses operate at the execution layer. Automated retries handle transient failures. Syntax parsers validate tool calls and structured outputs against schema. Format validators ensure that the agent's output respects the required structure (JSON, XML, function calls) before it is passed downstream. Parameter-filling routines extract required fields and set defaults for missing values. These are well-established techniques, and the evidence is unambiguous: mechanism-level defenses achieve occurrence rates ≥85% and 100% local recovery for parameter-filling, tool-format, and tool-selection errors. An agent that hallucinates a tool name can be caught and retried. A malformed JSON response can be repaired. A missing parameter can be filled with a sensible default or a request for clarification can be sent back to the agent (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+
+  But soft semantic deviations pierce these filters entirely. A soft semantic deviation occurs when the agent's output passes all syntactic checks—it is valid JSON, correct format, all required fields present—yet is semantically wrong: the value is incoherent with the task context, the interpretation of an instruction diverges from intent, the reasoning contains a logical gap that the agent's outputs conceal, or a factual claim is false despite syntactic validity. No syntax parser catches these. No retry mechanism fixes them, because retrying the same agent in the same state produces the same error. A mechanism-level defense cannot distinguish between "the tool call was malformed" (fixable by retry or repair) and "the agent chose the wrong tool for the task" (not fixable without reasoning-level intervention) (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+
+  Reasoning-level defenses respond by introducing cognitive redundancy: deploying another agent, a verifier, or a multi-model consensus to check the first agent's output for semantic correctness. Ask the downstream agent to spot-check the upstream agent's reasoning. Have a separate model evaluate whether a claim is well-supported before accepting it. These defenses operate at the level of *meaning*, not just *form*, and they can in principle catch semantic errors that mechanism-level filters miss (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+
+  Yet the evidence exposes a critical vulnerability: an agent maintaining its assigned role may be systematically blind to upstream errors. Consider a scenario where Agent A (a researcher) receives a soft semantic deviation from Agent B (a data analyst). Agent A's assigned role is to synthesize findings into a report. To spot the deviation as erroneous, Agent A would need to recognize that the input contradicts known facts, that Agent B's reasoning was flawed, or that the claim lacks support. But Agent A's role and prompting do not necessarily position it to doubt Agent B's competence in a specialist domain. Agent A treats the input as ground truth (because it came from the designated data analyst) and builds upon it. Reasoning-level verification fails not because Agent A lacks cognitive capacity, but because the role-based division of labor creates an asymmetry: Agent A is not empowered or prompted to second-guess the upstream specialist (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+
+  This reveals a deeper structural problem. Both mechanism-level and reasoning-level defenses struggle with errors that are syntactically valid and semantically ambiguous, or that arise from role-based blindness. A soft semantic deviation that is internally consistent with an agent's reasoning is difficult for another agent to spot without external grounding. A reasoning drift that occurs gradually across multiple steps may not be visible in a single snapshot. An agent cannot reliably verify content it is not authorized to doubt, or content whose semantic correctness lies outside its role-specific expertise.
+
+  The semantic gap left by current defenses is thus defined by three properties: (1) errors that are syntactically valid and pass mechanism-level checks, (2) errors that are semantically ambiguous or require external grounding to verify, and (3) errors that arise from role-based blindness, where an agent in its assigned role cannot recognize upstream errors as errors (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025). The evidence does not yet show a general solution that closes this gap for all three cases simultaneously. The two-layer approach works well for faults that are either clearly syntactic or clearly semantic. It breaks down in boundary cases where soft semantic deviations do not trigger reasoning-level verification because the verifier is role-constrained, or where the verifier itself hallucinates and mischaracterizes the upstream output's correctness.
+
+  ## Attribution models: agent-error prediction or trace causality?
+
+  The evidence supports a critical tension in how failure attribution should be framed, and this tension remains unresolved. The field operates with two incompatible conceptual models, each grounded in empirical work, each carrying different implications for system design. The tension is labeled here as T1.
+
+  The first model, implicit in much prior work, frames failure attribution as joint agent-error prediction. It asks: given a system failure, which agent made the mistake? This framing treats the multi-agent system as a network of agents, each of which has some probability of producing an erroneous output on any given step. When the system fails, the question is to identify which agent(s) failed and what type of error they committed. Defenses built on this model focus on monitoring individual agents, testing each agent's outputs, and assigning responsibility retroactively. The approach maps naturally onto traditional debugging: find the faulty component, fix the component, redeploy. It also aligns with how operators naturally think—"Agent A messed up"—and maps onto existing team structures organized around agent responsibilities.
+
+  The second model frames failure attribution as trace-level causal localization. It asks: in the execution trace, what is the earliest correctable decision point whose correction would prevent the observed error state? This framing treats the system as a sequence of decisions and their consequences, unfolding through time. A "correctable decision point" is a moment in the trace where an agent made a choice (what to output, how to interpret input, whether to proceed or abort) that, if reversed or changed, would lead to recovery. The earliest such point is the root cause in the sense that all subsequent errors depend on it. Defenses built on this model focus on tracing the error backward through the execution sequence, identifying where the causal chain began, and designing interventions that would have prevented the error at that point.
+
+  The distinction between these framings is not merely technical but consequential. Under agent-error prediction, you might identify that Agent C made three errors out of ten steps and add validation to Agent C. Under trace-level causality, you might find that Agent C did produce errors, but the earliest correctable decision point was Agent A's step 2, where A chose to trust a corrupted input without verification. The intervention target differs, and the practical consequence is different: agent-error prediction directs remediation toward the agent whose output was erroneous; trace-causality directs it toward the decision point that would prevent the cascade if corrected.
+
+  The evidence supporting the first model comes from established practice and methodological prevalence. Multi-agent systems are typically monitored and debugged by observing each agent's inputs and outputs, checking whether outputs match expected behavior, and flagging agents that deviate. This approach has worked for classical multi-agent systems and generalizes intuitively to LLM-based agents. Most attribution models in the literature operate via execution-log feature extraction and neural classification, which naturally produce agent-level or agent-pair-level predictions.
+
+  The evidence supporting the second model is more recent and efficiency-focused. StepFinder performs step-level failure attribution by using LLMs only during feature construction to encode execution logs into temporal semantic sequences, then applying parameter-efficient temporal-modeling and attention modules to capture cross-step dependencies (Zhu et al., 2026; Jardine, 2026). This approach achieves a 79% inference-time reduction versus the fastest LLM-based attributor, with no text-generation overhead. Crucially, StepFinder does not predict "which agent failed" but rather "which step in the trace contains the decision point that, if corrected, would recover the system." The mechanism is temporal: by modeling dependencies across steps, it identifies where the causal chain begins. More explicitly, trace-level attribution has been formally proposed as a reframing of root-cause identification in multi-agent systems toward finding the earliest correctable decision point in an execution trace (Wang, 2026; Li et al., 2026; Venkatesh et al., 2026). Online cross-channel causal monitoring extends this to detect and attribute cascade attacks as they unfold.
+
+  The practical advantage of trace-level causality is actionability. If you identify the earliest correctable decision point at step 7 in Agent A's reasoning, you can retry Agent A with corrected context, design a guard to catch similar errors earlier, or refactor the task to avoid that decision point entirely. By contrast, a prediction that "Agent A made a reasoning error" does not immediately suggest a fix—it names the problem but not the solution. The trace-level framing makes remediation legible.
+
+  Yet the two models are not merely different framings of the same thing. They entail different diagnostics and different defenses. Under agent-error prediction, you assign blame and build accountability, but you may attribute an error to the wrong agent because you are not tracing causal dependencies. You may over-attribute errors to agents that are simply propagating upstream errors. Under trace causality, you trace the execution sequence and identify the earliest decision point, but tracing requires access to a complete execution log and **temporal-hierarchical modeling** of step dependencies. The question remains unresolved because the evidence does not yet show that one model consistently outperforms the other across diverse system types and failure modes.
+
+  For practitioners, the choice between these framings is not merely technical—it is architectural. If the organization values clear role assignments and accountability, agent-error prediction aligns with that priority. If the goal is intervention with maximum leverage at minimum cost, trace-level causality is the better frame. The literature has begun to shift toward trace causality, as evidenced by StepFinder's efficiency gains and the explicit formalization of causal localization (Zhu et al., 2026; Jardine, 2026; Wang, 2026; Li et al., 2026; Venkatesh et al., 2026). But the evidence does not yet settle whether trace causality scales to large, heterogeneous multi-agent systems with incomplete logs, or whether agent-error prediction remains sufficient for practical deployment. The latent question is whether the shift is a matter of increasing sophistication (one approach strictly superior) or of trade-offs (each better under different conditions). The evidence leans toward trade-offs: StepFinder gains efficiency by avoiding text generation, but this may come at the cost of semantic richness in low-data regimes; agent-error prediction is intuitive but may miss causal dependencies. Until comparative evidence shows that interventions guided by one framing prevent cascades better than those guided by the other, the tension remains—not as a defect, but as a feature of the lattice requiring explicit navigation by system designers.
+
+  ## Cross-agent dependencies and temporal-graph visibility
+
+  The visibility constraint planted earlier—that failures often emerge only when examining cross-agent dependencies—finds resolution in trajectory-level attribution and temporal-graph modeling. The evidence shows concretely how practitioners can operationalize cross-agent observability, converting the structural constraint into a design principle.
+
+  Trajectory-level attribution takes the trace—the complete record of all agent inputs, outputs, state transitions, and inter-agent messages across time—as the primary object of analysis rather than individual agent logs (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025). This shifts the diagnostic question fundamentally: instead of asking "what did each agent do?", the trajectory view asks "how did the system's overall state evolve, and where did it diverge from the intended path?" Failures that are latent in individual agent logs become visible in the trajectory because the trajectory captures the coupling between agents. Agent A's output is input to Agent B; the trajectory records both the output and how Agent B interpreted and acted on it. An observer examining the trajectory can see the moment where Agent B's interpretation diverged from Agent A's intent, or where Agent A's output fed a misconception that Agent B built upon. This reframing moves from agent-centric to trajectory-centric thinking—from the story of one agent's execution to the story of how a distributed decision-making process unfolded across agent boundaries.
+
+  Temporal-graph modeling operationalizes cross-agent visibility by representing the multi-agent system as a dynamic graph whose nodes are agents (or agent-state-step tuples) and whose edges represent information flow and dependencies (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025). The graph evolves over time: at time step 1, Agent A produces output; at time step 2, that output becomes input to Agent B, creating a directed edge. At time step 3, Agent B produces output that influences Agent C, creating another edge. Each edge is timestamped and labeled with semantic content; as execution unfolds, the graph captures the evolving collaboration structure, making explicit the dependencies that single-agent logs conceal. A soft semantic deviation at Agent A at time *t*₁ becomes a node in this graph; the propagation of that deviation to Agent B at time *t*₂ becomes an edge. A failure cascade is a path through this graph from the initial deviation to the final error. With this representation, graph algorithms can identify critical nodes (agents whose errors are likely to cascade widely), critical edges (information flows where errors are most likely to propagate), and temporal patterns (sequences of dependencies that amplify errors or sequences that localize them).
+
+  The payoff for failure attribution is direct. A failure that manifests as degraded system output can be traced backward through the temporal graph to identify which edges (inter-agent dependencies) are most likely responsible. An agent whose outputs rarely influence others may be low priority for hardening; an agent whose outputs feed into many downstream agents may be high priority. A sequence of dependencies that creates a feedback loop may amplify errors; a feed-forward sequence may localize them. The temporal-graph view makes these structural properties visible, transforming failure diagnosis from a binary question (did this agent fail?) to a structural question (which dependencies in the interaction pattern created conditions for cascade propagation?).
+
+  Beyond diagnosis, the evidence points to temporal-hierarchical modeling as a design principle for stabilizing long-horizon multi-agent systems (Zhu et al., 2026; Jardine, 2026). Rather than treating the system as a static directed acyclic graph of agent interactions, temporal-hierarchical designs explicitly structure dependencies and recovery patterns across time steps and agent boundaries, preventing cascades from amplifying unchecked. These approaches organize stability detection and checkpoint insertion at multiple levels: execution level (step-by-step error checking), task level (checking whether the overall plan remains valid), and strategy level (checking whether the task should continue). By modeling the temporal hierarchy—dependencies within a step, between steps, across agents—designers can identify where intervention is most effective. A recovery mechanism inserted at a critical temporal point can prevent cascade amplification; the same mechanism inserted elsewhere may have little effect. Temporal structure becomes a scaffold for both failure prevention (by breaking cascade chains at key points) and recovery (by enabling bounded rollback when errors are detected late).
+
+  A complementary approach uses LLM-based guard models deployed as lightweight, non-invasive black-box classifiers (Qiao et al., 2026; Jia et al., 2026). These guard models do not require deep instrumentation of internal agent states or modification to agent architectures. Instead, they monitor the system externally: observing agent outputs and inter-agent messages, checking them for semantic plausibility and consistency with prior context, and filtering outputs that appear erroneous before they propagate to downstream agents. A guard model does not participate in the agent's reasoning—it observes from outside, acting as a semantic checkpoint between agents. This approach trades off full visibility (it does not access internal agent reasoning) for operational simplicity (it does not require redesigning agents or instrumenting their execution traces). The guard model operates as a semantic filter, catching soft semantic deviations before they propagate further. The evidence suggests that guard models can serve as a practical intermediate point between outcome-level metrics (which are too coarse) and full trajectory instrumentation (which is costly in storage and performance overhead). Yet guard models are reactive rather than preventive: by the time a hallucination is detected, it has already been generated. Their role is therefore to raise the cost of cascade propagation—by requiring confirmation, manual review, or re-prompting—rather than to eliminate cascades entirely.
+
+  The synthesis is clear: moving from single-agent logs to trajectory-level, cross-agent, temporal-graph visibility is operationally feasible and empirically productive. Trajectory logs, temporal graphs, and lightweight guard models each provide partial cross-agent visibility; together, they operationalize the observability necessary for semantic failure attribution. The visibility constraint is not eliminated but transformed: from a binary (logs are opaque to interaction failures) to a graduated problem (different methods provide different resolution at different costs). Full trajectory logging requires infrastructure (storage, performance management). Temporal-graph algorithms scale to moderate-sized systems but face complexity challenges in large, heterogeneous agent populations. Guard models are effective for certain failure modes (obvious soft semantic deviations, inconsistencies with context) but may miss subtle reasoning errors or generate false positives that block correct outputs. The evidence does not yet settle which approach dominates across problem scales, nor whether the trade-offs between visibility, latency, and instrumentation cost are best resolved through any single method. What the evidence does establish is that cross-agent thinking—making dependencies explicit and temporal structure visible—converts failure diagnosis from a problem that is structurally invisible to one that is at least observable and tractable.
+
+  ## Capability does not predict robustness: the instruction-following paradox
+
+  The assumption that stronger LLMs produce more robust multi-agent systems encounters direct empirical contradiction. The capability inversion finding (T2) reveals a counterintuitive relationship between general capability and operational robustness, with profound implications for defense strategy.
+
+  Under Blind Trust attacks—scenarios where agents receive systematically false instructions and must decide whether to comply—models exhibit striking and reversed performance profiles (Jia et al., 2026; Gho et al., 2025). GPT-5, positioned as a state-of-the-art general-capability LLM with superior instruction-following fidelity, achieved only 6.32% task success when given corrupted directives. DeepSeek-V3, positioned lower on traditional capability leaderboards, achieved 70.61% task success under identical conditions. This is not a marginal difference but a near-inversion of robustness. The mechanism appears direct: superior instruction-following fidelity compels stricter compliance with corrupted directives, reducing robustness under adversarial conditions. When instructions are malicious, instruction-following fidelity becomes a vulnerability rather than a strength. DeepSeek-V3, following instructions less rigidly, was more likely to deviate from corrupted inputs and maintain task coherence—a form of accidental skepticism that, while sometimes a failure in normal operation, is a strength when directives are poisoned.
+
+  This finding challenges a foundational assumption in LLM reliability: that improving capability—better reasoning, instruction-following, factuality—scales reliability upward. The evidence suggests instead that instruction-following fidelity is a double-edged property. High fidelity makes a model more useful when directives are benign; it also makes a model more vulnerable when directives are compromised. The relationship between capability and robustness is not monotonic but conditional on the threat model.
+
+  The capability inversion opens a new diagnostic category: failures that result not from the agent's inability to perform correctly, but from the agent's over-compliance with corrupted inputs. This is not a failure to follow instructions but a failure to recognize that instructions are corrupted. The distinction matters operationally because the defenses are entirely different. If an agent fails due to inability, you improve the agent. If an agent fails due to over-compliance, you introduce friction: skepticism routines, verification gates, role-based permission checks that limit which agents can issue which directives to which other agents. Practitioners face a direct choice: accept the capability inversion and mitigate it through external guards and verification, or design multi-agent interaction patterns that avoid placing high-instruction-following agents in roles where they must process untrusted inputs.
+
+  The evidence extends to characterize soft semantic deviation as a dynamic process shaped by interaction history, cascade depth, and model heterogeneity rather than a static property of an isolated output (Jamshidi et al., 2026; Jamshidi, 2026). In multi-agent settings, soft semantic deviation takes on new forms: unsupported claims cascade propagate differently than factual incorrectness; inconsistencies in reasoning may be caught by one agent but amplified by another depending on the agent's verification posture. A soft semantic deviation in Agent A's reasoning may be harmless if the next agent applies skeptical verification; it may cascade if the next agent assumes fidelity. A more capable model with higher prior probability of correctness may cascade propagate soft semantic deviations from weaker models more readily because it trusts the upstream agent more. Model heterogeneity in multi-agent systems creates an environment where the same soft semantic deviation becomes a dynamically shaped failure mode, and homogenizing the system toward a single, highly capable model may reduce robustness compared to heterogeneous composition.
+
+  Widening the frame further, capability leaderboards fail as predictors of operational utility when deployment constraints are jointly active (Digalakis et al., 2025). These leaderboards rank models by performance on benign, curated tasks under assumptions of trustworthy instruction; they do not measure robustness to adversarial input, robustness to corrupted directives, or robustness to cascade propagation across agent chains. A model ranked highly on general benchmarks may be operationally inferior in contexts where adversarial inputs are possible or where cost, latency, or skepticism become design requirements. A model ranked lower on capability leaderboards may be operationally superior precisely because its lower instruction-following fidelity acts as a weak form of semantic verification. The choice of model cannot be made on capability metrics alone; it requires explicit robustness testing under adversarial and corrupted input conditions, and it may require choosing models precisely because they are less capable in isolated benchmarks if that lesser capability carries greater skepticism or diversity of reasoning.
+
+  The practical implication is severe: practitioners cannot assume that improvements to single-agent capability will improve multi-agent robustness. The capability inversion, the dynamic nature of soft semantic deviation in interaction, and the role of deployment constraints in determining operational utility all point to a more complex landscape where stronger models do not automatically mean more reliable systems. Defense strategy must therefore expand beyond "improve the models" to include "understand the vulnerability profile of each model," "design systems that constrain dangerous compliance," and "verify semantic correctness through external mechanisms rather than assuming agent fidelity." The field has not yet established whether mixed-capability strategies outperform homogeneous high-capability teams under adversarial conditions, nor can it yet predict which models will be robust in which multi-agent configurations. This uncertainty is a key open question for deployment.
+
+  ## Toward semantic resilience: reasoning, attribution, and guard models
+
+  The evidence reviewed so far exposes three entangled challenges: mechanism-level defenses cannot catch soft semantic deviations; single-agent logs are blind to multi-agent failures; and stronger capability does not predict robustness. Addressing semantic resilience—the ability of LLM-based multi-agent systems to detect and recover from soft semantic deviations—requires synthesizing insights across these challenges into a layered defense architecture that none of the individual components provide in isolation.
+
+  The starting point is acknowledging what each defense layer can and cannot do. Mechanism-level defenses (retries, syntax parsers, parameter validators) excel at execution-layer noise, achieving local recovery rates of 85–100% for parameter-filling, tool-format, and tool-selection errors (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025). These defenses are cheap, non-invasive, and fast. They should remain the first line of defense. But they fail against soft semantic deviations: a hallucinated fact that is well-integrated into a coherent narrative passes all syntax checks. A misinterpreted instruction that is reasonable on its face will not be caught by a format validator. The mechanism-level layer is necessary but insufficient.
+
+  Reasoning-level defenses—verification, multi-model consensus, role-based checking—are the required complement. But as the evidence showed, reasoning-level defenses are vulnerable to role-based blindness: an agent asked to verify another agent's specialist output may lack the authority or positioning to doubt it. Reasoning-level defenses are most effective when deployed asymmetrically: a dedicated verification agent with explicit authority to challenge claims, access to external grounding (fact-checking databases, knowledge bases), and prompting that overcomes role-based deference. Alternatively, multi-agent consensus—where multiple independent agents reason about the same question and their divergence signals potential error—avoids requiring any single agent to be skeptical [defense_stratification]. Yet even well-designed reasoning-level defenses can fail against subtle semantic drift or hallucinations that are internally consistent with the agent's reasoning.
+
+  Here, cross-agent visibility and guard models become essential. A guard model—an LLM-based lightweight black-box classifier deployed at runtime to monitor agent outputs—offers a practical intervention point (Qiao et al., 2026; Jia et al., 2026). Unlike reasoning-level verification, which asks an agent within the system to check another agent's work, a guard model is positioned outside the system and is not bound by role-based assumptions. It observes agent outputs in context and applies learned patterns or heuristic checks to detect semantic misbehavior. Guard models do not require full understanding of the system's internal state or semantics; they operate at the system boundary observing outputs and filtering. This makes them non-invasive and scalable.
+
+  But guard models are a partial solution. They can catch outputs that look obviously wrong, but they may miss subtle drift, they may false-alarm on unusual-but-correct outputs, and they provide no failure attribution (a guard model identifies that something is wrong but not where the error originated or how it cascaded). This is where trace-level causal attribution becomes essential. Tracing through the execution sequence to find the earliest correctable decision point identifies where intervention would have prevented the error (Wang, 2026; Li et al., 2026; Venkatesh et al., 2026). This identification supports both immediate recovery (reverse that decision, proceed with correction) and long-term learning (why was that decision wrong? what guided it? how can we prevent it next time?).
+
+  The synthesis is a defense-in-depth architecture operating across four levels. First, mechanism-level filters remain the primary defense: automated retries, syntax parsers, format validators. These are cheap and effective for execution-layer noise. Second, asymmetrically deployed reasoning-level verification targets semantic risks through dedicated verification agents with external grounding, or through multi-agent consensus that isolates divergence itself as the signal of potential error. Third, guard models provide runtime monitoring and filtering at agent boundaries, catching soft semantic deviations before they cascade propagation proceeds further (Qiao et al., 2026; Jia et al., 2026). Fourth, trace-level causal attribution identifies where cascades begin and which decision points, if corrected, would prevent failure. None of these layers, applied in isolation, closes the semantic gap. Together, they move systems from reactive detection (discovering failures after they occur) toward proactive semantic resilience (preventing cascades before they manifest as system-level degradation).
+
+  The prerequisites for moving from reactive detection to proactive semantic resilience cluster around visibility and explicit modeling. Practitioners must instrument not just individual agents but the inter-agent communication layer to reveal dependencies and cascade propagation patterns. Temporal-hierarchical modeling transforms raw message traces into structures that expose which agents are critical to cascades and where the system is most fragile (Zhu et al., 2026; Jardine, 2026). Checkpoint design at execution, task, and strategy levels uses this visibility to arrest cascade propagation before it reaches system-wide failure. A second prerequisite is accepting the capability inversion finding: stronger models are not automatically more robust. Defenses must account for the possibility that high-capability agents may be more vulnerable to certain failure modes due to superior instruction-following fidelity. This may motivate deliberate model heterogeneity, mixed-capability teams with explicit roles for skepticism, or specific constraints on how high-capability agents are deployed. Yet this architecture itself faces scaling challenges. As systems grow in agent count and task complexity, instrumentation cost rises. Trace logging becomes expensive. Guard models must monitor every inter-agent message, adding latency. The evidence does not yet show how to achieve semantic resilience at scale, nor how to validate that guard models and verification mechanisms are actually catching real failures rather than creating the illusion of safety.
+
+  ## Open questions and future directions
+
+  The problem-lattice structure of this review—organized around unresolved tensions and partial evidence—naturally generates a concrete research agenda. The open questions are not abstract. They arise from the evidence's gaps and from the constraints that each tension imposes on next steps.
+
+  **Attribution framing at scale:** The tension between agent-error prediction and trace-level causal localization (T1) remains unresolved because the evidence supporting each comes from different scales and system types. StepFinder's efficiency gains and temporal modeling are demonstrated on bounded systems with complete execution logs. Agent-error prediction has worked well in classical multi-agent systems and in practice for smaller LLM-based teams. The open question is: as system size and complexity grow—hundreds of agents, heterogeneous models, partial logs, long time horizons—which attribution framing scales better? And can the two be unified into a single framework that leverages the efficiency of trace-level causal localization while preserving the intuitive diagnostics of agent-error prediction? A concrete next step is to implement both attribution approaches on a single suite of large, heterogeneous multi-agent benchmarks and measure latency, accuracy, and actionability (how useful is the attributed root cause for designing a fix?). This study must directly compare interventions derived from each framing on real execution traces to establish which produces remediations that actually prevent similar future failures.
+
+  **Capability inversion and robustness prediction:** The capability inversion finding (T2)—that superior instruction-following can reduce robustness under corrupted directives—is grounded in a single experimental study showing GPT-5 at 6.32% versus DeepSeek-V3 at 70.61% under Blind Trust attacks (Jia et al., 2026; Gho et al., 2025). The open question is whether this inversion is a general principle or an artifact of specific model families, specific attack types, or specific task domains. Under what conditions does capability inversely correlate with robustness? Can the inversion be predicted from model properties (training data, instruction-following metrics, adversarial robustness scores) without direct testing? Is there a way to decouple instruction-following fidelity from over-compliance vulnerability? A concrete next step is to test the Blind Trust attack across a broader panel of models (different sizes, training approaches, architectures) and across multiple attack types (not just false instructions, but contradictory information, ambiguous directives, role-conflicts, context pollution, and role misdirection). Testing must also scale to larger systems with more than three agents and longer execution horizons. Building a predictive map—given a model's properties, can we forecast whether it will be capable-but-fragile or less-capable-but-robust?—would allow practitioners to avoid capability inversion through deliberate model selection or training.
+
+  **Reasoning-level defenses without role blindness:** The evidence shows that reasoning-level cognitive redundancy can be defeated when an agent in its assigned role cannot recognize upstream errors as errors. The open question is how to design reasoning-level defenses that provide semantic checking without requiring an agent to doubt its role assignment. One path forward is explicit role redesign: agents could be assigned not just to execute goals but to verify them before execution. Another involves meta-level skepticism—agents prompted to evaluate the plausibility of their inputs not as role doubt but as part of their assigned task. Neither approach has been systematically evaluated. A concrete next step is to design and test asymmetric verification protocols where verification agents have explicit authority to challenge others, are equipped with external grounding, and are deployed in a feed-forward structure that prevents role-based blindness. Additionally, verify whether reasoning-level defenses can be reformulated as *commitment to verification* rather than *doubt of role*—for example, tasking an agent to "create a plan and identify the assumptions underlying it," then having a separate skeptical agent systematically question those assumptions without claiming to know ground truth.
+
+  **Scaling cross-agent visibility:** The evidence shows that trajectory-level attribution and temporal-graph modeling are powerful for failure diagnosis (Zhu et al., 2026; Jardine, 2026), but the evidence on scaling is limited. How do temporal-graph algorithms perform on systems with hundreds or thousands of agents? What is the cost of maintaining complete execution logs as multi-agent systems run for hours or days? Can guard models be deployed at scale without becoming performance bottlenecks? The open question is whether the observability infrastructure needed for semantic resilience can be deployed cost-effectively in production. A concrete next step is to implement trajectory logging, temporal-graph analysis, and guard models on realistic long-horizon multi-agent systems (collaborative writing, multi-step planning, simulated environments) and measure storage, latency, and accuracy trade-offs. In parallel, investigate whether guard models of varying complexity (from simple statistical filters to smaller fine-tuned LLMs) can detect semantic faults at acceptable false-positive and false-negative rates, and establish the accuracy-cost frontier as system size grows.
+
+  **Validation without exhaustive oracles:** The evidence shows multiple defense mechanisms (guard models, reasoning-level verification, trace-level attribution), but validating that these mechanisms actually prevent failures requires comparing against ground truth. In many domains, ground truth is expensive or unavailable (no oracle says "this reasoning chain is definitely correct"). The open question is how to validate semantic resilience without exhaustive oracle testing. One path forward is to develop a standard benchmark suite of multi-agent tasks with known failure modes (hallucinations at step 3, ambiguous input at step 5, cascading errors through steps 7–10), enabling comparative evaluation of defense strategies without requiring every team to instrument identically. A concrete next step is to develop validation benchmarks for semantic resilience that do not require expensive oracles but do require demonstrable coverage of realistic failure modes. These benchmarks should measure not just final task success but intermediate metrics: how many soft semantic deviations were generated? how many were caught before cascade propagation? how many cascaded to other agents?
+
+  **Unified framework for temporal-hierarchical stability:** The evidence points to temporal structure—sequences, hierarchies, graphs—as the common substrate for both efficient failure attribution and online cascade monitoring (Zhu et al., 2026; Jardine, 2026). Both temporal-hierarchical designs for long-horizon stability and cross-agent visibility approaches for detecting interaction-level failures operate on temporal and relational structure, yet they have been developed largely in parallel. The open question is whether a single framework can unify these approaches: modeling both what agents do (their roles and capabilities), when they do it (temporal sequences), why they do it (causal dependencies), and how it cascades (graph propagation). Such a framework would likely represent multi-agent systems as temporal graphs where nodes are agent states, edges are messages, and hierarchies are timescale-based abstractions (execution-level steps, task-level phases, strategy-level epochs). Failures would be subgraphs where soft semantic deviation information propagates from source to outcome. Diagnosis becomes graph-query (find the minimal subgraph that explains the failure) and defense becomes subgraph-surgery (add edges or nodes that break the failure path). A concrete next step is to formally specify a temporal-hierarchical multi-agent model and implement it on a realistic system, measuring whether unified design improves both efficiency and robustness compared to separate temporal-hierarchical and cross-agent tools.
+
+  ## Conclusion
+
+  LLM-based multi-agent systems fail silently and semantically—soft semantic deviations propagate without triggering explicit exceptions—and the field remains organized by interlocking, unresolved tensions rather than converging toward unified solutions. This review has mapped the landscape as a problem-lattice: a structured space where each tension is grounded in partial evidence, carries real consequences for system design, and reflects genuine methodological or conceptual choices that cannot be fully dissolved without loss of information.
+
+  Two central tensions define the state of knowledge. The first tension (T1) concerns the framing of failure attribution: should practitioners trace which agents made errors (agent-error prediction), or should they identify the earliest correctable decision point in an execution trace whose remediation would prevent the observed failure (trace-level causal localization)? The evidence supports both approaches under different conditions. Agent-error prediction is intuitive and operationally simpler, aligning with team accountability structures; trace-level causal localization is more complete and enables more effective intervention, with efficiency gains demonstrated through temporal-hierarchical approaches. Yet these framings are not equivalent—they answer different diagnostic questions and suggest different remediation strategies. The evidence does not yet provide a principled basis for choosing between them across diverse deployment contexts, and this choice commits practitioners to different diagnostic pipelines and scalability profiles.
+
+  The second tension (T2) concerns the relationship between capability and robustness: does stronger instruction-following improve multi-agent resilience? The empirical finding is clear and counterintuitive. Under Blind Trust attacks with corrupted directives, GPT-5's superior instruction-following fidelity resulted in only 6.32% task success, while DeepSeek-V3's weaker fidelity achieved 70.61% . This capability inversion—wherein stronger general capability reduces robustness under adversarial input conditions—contradicts the assumption that upgrading to stronger models improves system reliability. It reveals that instruction-following fidelity is conditional in its value: a virtue under trusted inputs, a vulnerability under corrupted inputs. Practitioners cannot assume that deploying the highest-capability models will produce the most reliable systems. Instead, they must test robustness explicitly under adversarial conditions, and capability leaderboards fail as predictors of operational utility when deployment constraints are jointly active.
+
+  Beyond these headline tensions lies a deeper structural problem: the gap between mechanism-level and reasoning-level defenses. Mechanism-level filters (retries, syntax parsers, parameter validators) are effective against execution-layer noise but powerless against soft semantic deviations. Reasoning-level cognitive redundancy (verification, multi-model consensus) is the required complement but is vulnerable to role-based blindness: an agent in its assigned role may be structurally unable to recognize upstream errors as errors. Neither layer alone closes the semantic gap. The semantic errors that mechanism-level filters miss and that reasoning-level defenses do not reliably catch remain partly undefended. Moving toward semantic resilience requires layering mechanism-level defenses, asymmetrically deployed reasoning-level verification, lightweight guard models for runtime semantic monitoring, and trace-level causal attribution that identifies root causes and prevents cascades in future runs.
+
+  Cross-agent visibility emerges as a prerequisite for all of these defenses. Single-agent logs are blind to multi-agent failures; failures emerge only when examining inter-agent dependencies, message flows, and cascade dynamics. Trajectory-level attribution, temporal-graph modeling, and lightweight guard models operationalize cross-agent visibility at different cost-effectiveness trade-offs, yet moving from single-agent logs to cross-agent traces introduces new analytical complexity: systems become harder to instrument, traces harder to interpret, and the causal structures that trace-level analysis reveals demand sophisticated reasoning to act on effectively. The visibility constraint—initially presented as an obstacle—becomes a design principle: systems must be instrumented to expose interaction surfaces from the outset, treating single-agent logs as insufficient for diagnosis.
+
+  The unified temporal-hierarchical framework sketched in the prior section offers a path forward. Modeling multi-agent systems as temporal graphs where nodes are agent states, edges are messages, and hierarchies are timescale-based abstractions would represent both what agents do (roles and capabilities), when they do it (temporal sequences), why they do it (causal dependencies), and how it cascades (graph propagation). Failures become subgraphs where soft semantic deviation information propagates from source to outcome. Diagnosis becomes graph-query and defense becomes subgraph-surgery. Yet whether a single framework can unify trace-level causal attribution and cross-agent visibility—can resolve T1 and fully operationalize T2's defensive implications—remains an open question requiring formal specification and empirical validation on realistic systems.
+
+  What this review concludes is this: semantic resilience in LLM-based multi-agent systems is achievable but requires moving beyond both mechanism-level filters alone and the assumption that stronger models are more robust. It requires building systems that expose cross-agent dependencies, that layer defenses across execution and reasoning levels, that trace cascades back to their root causes through temporal-hierarchical structures, and that verify semantic correctness through external mechanisms rather than trusting agent fidelity. The field has the concepts and early evidence to begin this work. What remains unresolved are the contours of the tensions themselves: whether T1 can be settled through empirical testing at scale or whether both framings are partial truths suited to different contexts; whether T2's capability inversion can be predicted from model properties or whether practitioners must test each model-system pair individually; and whether integrated defense-in-depth can be deployed without prohibitive overhead. These questions cannot be answered by reviewing existing evidence; they require new research at scale and across diverse threat models. Until then, the design of robust LLM-based multi-agent systems will remain informed by incomplete evidence, contested assumptions, and visible gaps—but those gaps are now mapped, named, and positioned as permanent structural features of the problem rather than defects of current solutions.
+
+  ## References
+
+  - Jia et al., 2026. MAS-FIRE: Fault Injection and Reliability Evaluation for LLM-Based Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2602.19843
+  - Jamshidi, 2026. Collective Hallucination in Multi-Agent LLMs:Modeling and Defense. https://ar5iv.labs.arxiv.org/abs/2606.07941
+  - Jamshidi et al., 2026. Hallucination Cascade: Analyzing Error Propagation in Multi-Agent LLM Systems. https://ar5iv.labs.arxiv.org/abs/2606.07937
+  - Zhu et al., 2026. StepFinder: A Temporal Semantic Framework for Failure Attribution in Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2606.03467
+  - Xie et al., 2026. From Spark to Fire: Modeling and Mitigating Error Cascades in LLM-Based Multi-Agent Collaboration. https://ar5iv.labs.arxiv.org/abs/2603.04474
+  - Hossain et al., 2025. A Multi-Agent LLM Defense Pipeline Against Prompt Injection Attacks. https://ar5iv.labs.arxiv.org/abs/2509.14285
+  - Wang et al., 2025. MAS-Shield: A Defense Framework for Secure and Efficient LLM MAS. https://ar5iv.labs.arxiv.org/abs/2511.22924
+  - Jardine, 2026. CTHA: Constrained Temporal Hierarchical Architecture for Stable Multi-Agent LLM Systems. https://ar5iv.labs.arxiv.org/abs/2601.10738
+  - Qiao et al., 2026. VerifyMAS: Hypothesis Verification for Failure Attribution in LLM Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2605.17467
+  - Zhou et al., 2025. GUARDIAN: Safeguarding LLM Multi-Agent Collaborations with Temporal Graph Modeling. https://ar5iv.labs.arxiv.org/abs/2505.19234
+  - Wang, 2026. AgentTrace: Causal Graph Tracing for Root Cause Analysis in Deployed Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2603.14688
+  - Li et al., 2026. Towards Self-Improving Error Diagnosis in Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2604.17658
+  - Venkatesh et al., 2026. CASPIAN: Online Detection and Attribution of Cascade Attacks in LLM Multi-Agent Systems via Cross-Channel Causal Monitoring. https://ar5iv.labs.arxiv.org/abs/2605.19240
+  - Gho et al., 2025. From Competition to Coordination: Market Making as a Scalable Framework for Safe and Aligned Multi-Agent LLM Systems. https://ar5iv.labs.arxiv.org/abs/2511.17621
+  - Digalakis et al., 2025. ML Compass: Navigating Capability, Cost, and Compliance Trade-offs in AI Model Deployment. https://ar5iv.labs.arxiv.org/abs/2512.23487
+narrative_statements:
+- text: 'Capability—the primary lever by which the field has improved LLM reliability—appears to cut both ways: it can amplify robustness or, counterintuitively, increase vulnerability under certain adversarial conditions (Jia et al., 2026; Gho et al., 2025; Digalakis et al., 2025).'
+  claim_refs:
+  - C10
+  - C11
+  expert_refs: []
+- text: '" These are not equivalent questions; they lead to different tools, different defenses, and different deployment strategies (Jia et al., 2026; Zhu et al., 2026; Xie et al., 2026; Qiao et al., 2026; Zhou et al., 2025).'
+  claim_refs:
+  - C2
+  - C6
+  expert_refs: []
+- text: 61%—a reversal that contradicts the assumption that stronger capability improves robustness and problematizes widely-used capability leaderboards as predictors of operational utility (Jia et al., 2026; Gho et al., 2025; Digalakis et al., 2025).
+  claim_refs:
+  - C10
+  - C11
+  expert_refs: []
+- text: This visibility constraint motivates trace-level attribution over agent-first analysis, yet the means to operationalize cross-agent visibility remain partial and contested (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: A soft semantic deviation occurs when an agent outputs text that is syntactically well-formed, parses successfully as valid JSON or structured code, and produces no runtime exception, yet is semantically misaligned with the intent of the query or the state of the system (Jia et al., 2026; Jamshidi, 2026; Jamshidi et al., 2026).
+  claim_refs:
+  - C1
+  expert_refs: []
+- text: The cross-agent visibility constraint emerges directly from this architecture (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: 'In LLM-based multi-agent systems, the evidence converges on a clear finding: single-step execution errors propagate through agent interactions and amplify into cascading, system-wide failures that can be modeled as an ignition-and-spread process (Jia et al., 2026; Zhu et al., 2026; Xie et al., 2026).'
+  claim_refs:
+  - C2
+  expert_refs: []
+- text: The MAS-FIRE framework injects systematically defined faults into three representative multi-agent systems (MetaGPT, Table-Critic, Camel), observes their propagation via execution-log analysis, and classifies the results through inter-rater coding (Jia et al., 2026).
+  claim_refs:
+  - C3
+  expert_refs: []
+- text: 'The evidence reveals a clear stratification: mechanism-level defenses absorb execution-layer noise with high effectiveness, but soft semantic deviations bypass these filters, creating a defensive gap that reasoning-level redundancy attempts to fill—incompletely (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).'
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: A missing parameter can be filled with a sensible default or a request for clarification can be sent back to the agent (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: A mechanism-level defense cannot distinguish between "the tool call was malformed" (fixable by retry or repair) and "the agent chose the wrong tool for the task" (not fixable without reasoning-level intervention) (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: These defenses operate at the level of *meaning*, not just *form*, and they can in principle catch semantic errors that mechanism-level filters miss (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: 'Reasoning-level verification fails not because Agent A lacks cognitive capacity, but because the role-based division of labor creates an asymmetry: Agent A is not empowered or prompted to second-guess the upstream specialist (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).'
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: 'The semantic gap left by current defenses is thus defined by three properties: (1) errors that are syntactically valid and pass mechanism-level checks, (2) errors that are semantically ambiguous or require external grounding to verify, and (3) errors that arise from role-based blindness, where an agent in its assigned role cannot recognize upstream errors as errors (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).'
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: StepFinder performs step-level failure attribution by using LLMs only during feature construction to encode execution logs into temporal semantic sequences, then applying parameter-efficient temporal-modeling and attention modules to capture cross-step dependencies (Zhu et al., 2026; Jardine, 2026).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: More explicitly, trace-level attribution has been formally proposed as a reframing of root-cause identification in multi-agent systems toward finding the earliest correctable decision point in an execution trace (Wang, 2026; Li et al., 2026; Venkatesh et al., 2026).
+  claim_refs:
+  - C8
+  expert_refs: []
+- text: The literature has begun to shift toward trace causality, as evidenced by StepFinder's efficiency gains and the explicit formalization of causal localization (Zhu et al., 2026; Jardine, 2026; Wang, 2026; Li et al., 2026; Venkatesh et al., 2026).
+  claim_refs:
+  - C5
+  - C8
+  expert_refs: []
+- text: Trajectory-level attribution takes the trace—the complete record of all agent inputs, outputs, state transitions, and inter-agent messages across time—as the primary object of analysis rather than individual agent logs (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: Temporal-graph modeling operationalizes cross-agent visibility by representing the multi-agent system as a dynamic graph whose nodes are agents (or agent-state-step tuples) and whose edges represent information flow and dependencies (Qiao et al., 2026; Jia et al., 2026; Zhou et al., 2025).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: Beyond diagnosis, the evidence points to temporal-hierarchical modeling as a design principle for stabilizing long-horizon multi-agent systems (Zhu et al., 2026; Jardine, 2026).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: A complementary approach uses LLM-based guard models deployed as lightweight, non-invasive black-box classifiers (Qiao et al., 2026; Jia et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: Under Blind Trust attacks—scenarios where agents receive systematically false instructions and must decide whether to comply—models exhibit striking and reversed performance profiles (Jia et al., 2026; Gho et al., 2025).
+  claim_refs:
+  - C10
+  expert_refs: []
+- text: The evidence extends to characterize soft semantic deviation as a dynamic process shaped by interaction history, cascade depth, and model heterogeneity rather than a static property of an isolated output (Jamshidi et al., 2026; Jamshidi, 2026).
+  claim_refs:
+  - C9
+  expert_refs: []
+- text: Widening the frame further, capability leaderboards fail as predictors of operational utility when deployment constraints are jointly active (Digalakis et al., 2025).
+  claim_refs:
+  - C11
+  expert_refs: []
+- text: Mechanism-level defenses (retries, syntax parsers, parameter validators) excel at execution-layer noise, achieving local recovery rates of 85–100% for parameter-filling, tool-format, and tool-selection errors (Jia et al., 2026; Hossain et al., 2025; Wang et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: A guard model—an LLM-based lightweight black-box classifier deployed at runtime to monitor agent outputs—offers a practical intervention point (Qiao et al., 2026; Jia et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: Tracing through the execution sequence to find the earliest correctable decision point identifies where intervention would have prevented the error (Wang, 2026; Li et al., 2026; Venkatesh et al., 2026).
+  claim_refs:
+  - C8
+  expert_refs: []
+- text: Third, guard models provide runtime monitoring and filtering at agent boundaries, catching soft semantic deviations before they cascade propagation proceeds further (Qiao et al., 2026; Jia et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: Temporal-hierarchical modeling transforms raw message traces into structures that expose which agents are critical to cascades and where the system is most fragile (Zhu et al., 2026; Jardine, 2026).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: 61% under Blind Trust attacks (Jia et al., 2026; Gho et al., 2025).
+  claim_refs:
+  - C10
+  expert_refs: []
+- text: '**Scaling cross-agent visibility:** The evidence shows that trajectory-level attribution and temporal-graph modeling are powerful for failure diagnosis (Zhu et al., 2026; Jardine, 2026), but the evidence on scaling is limited.'
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: '**Unified framework for temporal-hierarchical stability:** The evidence points to temporal structure—sequences, hierarchies, graphs—as the common substrate for both efficient failure attribution and online cascade monitoring (Zhu et al., 2026; Jardine, 2026).'
+  claim_refs:
+  - C5
+  expert_refs: []
+gaps:
+- description: The field lacks agreed instruments to measure cross-agent semantic failure propagation, since outcome metrics treat MAS as a black box and single-agent logs miss interaction-level faults.
+  gap_type: methodological
+- description: No study jointly measures attribution accuracy, runtime cost, and downstream recovery on the same production MAS, leaving the operational value of lightweight attributors and guard models untested.
+  gap_type: empirical
+- description: No mechanistic account predicts when cascade depth attenuates versus amplifies hallucination and error, beyond per-configuration empirical amplification factors.
+  gap_type: theoretical
