@@ -260,21 +260,10 @@ pub async fn migrate(pool: &SqlitePool) -> AlzinaResult<()> {
 /// `#[cfg(test)]` modules.
 #[cfg(test)]
 pub async fn in_memory_pool_with_search_schema() -> AlzinaResult<sqlx::SqlitePool> {
-    // With `kb` (default), reuse the memory crate's pool so tests exercise the
-    // real Phase 1 + Phase 2 boot order. Byte-identical to the original.
-    #[cfg(feature = "kb")]
-    let pool = alzina_memory::schema::in_memory_pool().await.map_err(|e| {
-        AlzinaError::Search(SearchDetail {
-            message: e.clone(),
-            degraded: true,
-            degradation_reason: Some(format!("memory schema init: {e}")),
-        })
-    })?;
-    // Without `kb`, alzina-memory is not compiled. Build the base pool inline:
+    // alzina-memory is not vendored here. Build the base pool inline:
     // register sqlite-vec BEFORE opening the connection (mirrors the daemon /
     // litreview ordering fix), then create the one `schema_version` table that
     // `crate::schema::migrate` requires from Phase 1.
-    #[cfg(not(feature = "kb"))]
     let pool = {
         use std::str::FromStr;
         register_sqlite_vec_extension();
@@ -319,47 +308,5 @@ mod tests {
             .fetch_one(&pool)
             .await
             .unwrap();
-    }
-
-    // Asserts the memory+search SHARED schema_version ladder {1,2,3}, which
-    // only exists when alzina-memory seeds rows 1+2 — i.e. with `kb`. The
-    // literature-only build has no alzina-memory, so this is kb-gated.
-    #[cfg(feature = "kb")]
-    #[tokio::test]
-    async fn migrate_bumps_schema_version_to_3() {
-        // Phase 1 paired-build bumped alzina-memory's SCHEMA_VERSION 2→3
-        // (stitch_records.dispatch_id). alzina-search reuses the shared
-        // schema_version table via in_memory_pool_with_search_schema, so
-        // the head version is now 3.
-        let pool = in_memory_pool_with_search_schema().await.unwrap();
-        let row: (i64,) = sqlx::query_as("SELECT MAX(version) FROM schema_version")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(row.0, 3);
-    }
-
-    // Same memory-coupled ladder {1,2,3} → kb-gated (see above).
-    #[cfg(feature = "kb")]
-    #[tokio::test]
-    async fn migrate_idempotent_with_phase2() {
-        // Idempotency property: a second migrate() must not duplicate
-        // schema_version rows. After Phase 1 paired-build the expected
-        // set is {1, 2, 3} (was {1, 2} pre-Phase-1-paired-build).
-        let pool = in_memory_pool_with_search_schema().await.unwrap();
-        // Second call must succeed and must NOT duplicate schema_version
-        // rows.
-        migrate(&pool).await.unwrap();
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM schema_version")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count.0, 3, "expected exactly versions {{1, 2, 3}} present");
-        let versions: Vec<(i64,)> =
-            sqlx::query_as("SELECT version FROM schema_version ORDER BY version")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
-        assert_eq!(versions, vec![(1,), (2,), (3,)]);
     }
 }

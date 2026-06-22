@@ -1,14 +1,9 @@
 //! `AgentExecutor` — the LLM execution seam.
 //!
-//! Extracted from [`crate::runner::alzina_runner`] so the TTD engine and the
-//! composition layer can depend on the executor abstraction without pulling in
-//! the governance-heavy `AlzinaRunner` (and its `alzina-governance` /
-//! `alzina-memory` / `alzina-workspace` / `adk-rust` deps). The `runner`
-//! feature gates the runner module; this module is always compiled.
-//!
-//! `crate::runner::alzina_runner` re-exports these types under their original
-//! path, so existing imports continue to resolve when the `runner` feature is
-//! enabled.
+//! Extracted from the (non-vendored) `alzina_runner` so the TTD engine can
+//! depend on the executor abstraction without pulling in the governance-heavy
+//! runtime (`alzina-governance` / `alzina-memory` / `alzina-workspace` /
+//! `adk-rust`), none of which ship in this standalone repo.
 
 use async_trait::async_trait;
 

@@ -38,58 +38,10 @@ pub mod adapter;
 pub mod executor;
 pub mod ttd;
 
-// The full orchestration runtime (agent dispatch, composition, sessions,
-// governance integration, the ADK sidecar). Gated behind the default-on
-// `runner` feature so the TTD engine can be built standalone with
-// `--no-default-features`.
-#[cfg(feature = "runner")]
-pub mod composition;
-#[cfg(feature = "runner")]
-pub mod engine;
-#[cfg(feature = "runner")]
-pub(crate) mod quality;
-#[cfg(feature = "runner")]
-pub mod runner;
-#[cfg(feature = "runner")]
-pub mod seam_tools;
-#[cfg(feature = "runner")]
-pub mod session;
-#[cfg(feature = "runner")]
-pub mod signals;
-#[cfg(feature = "runner")]
-pub mod tool_adapter;
-
-#[cfg(all(feature = "runner", any(test, feature = "test-harness")))]
-pub mod test_helpers;
-
-#[cfg(feature = "test-harness")]
-pub use test_helpers::SleepyExecutor;
-
 // ── Primary re-exports ──────────────────────────────────────────────────────
 
 // The executor seam is always available (no governance deps).
 pub use executor::{AgentExecutor, ExecutorEventEmitter, SamplingParams};
-
-// RT3-17: Public API surface — only listed types are fully public.
-#[cfg(feature = "runner")]
-pub use engine::{ExecutionResult, OrchestratorEngine, PatternRegistry};
-
-#[cfg(feature = "runner")]
-pub use composition::compiler::{CompOp, CompiledGraph, SpawnSpec};
-
-// Re-export runner types needed to construct the engine
-#[cfg(feature = "runner")]
-pub use runner::alzina_runner::{AlzinaRunner, SpawnResult};
-#[cfg(feature = "runner")]
-pub use runner::assigned_dirs::{AssignedDirGuard, AssignedDirRegistry};
-#[cfg(feature = "runner")]
-pub use runner::claude_agent_sdk::ClaudeAgentSdkExecutor;
-#[cfg(feature = "runner")]
-pub use runner::sidecar_handle::{ChatEventEmitter, SidecarHandle};
-#[cfg(feature = "runner")]
-pub use runner::sidecar_protocol::CustomToolDefinition;
-#[cfg(feature = "runner")]
-pub use session::hierarchy::SessionHierarchy;
 
 #[cfg(test)]
 mod tests {

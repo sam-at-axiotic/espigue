@@ -12,11 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 # The standalone TTD synthesis engine — no runner/governance/adk/sidecar.
-# Direct path dep (not workspace-inherited) so default-features can be disabled.
-alzina-orchestration = { path = "../alzina-orchestration", default-features = false }
-# default-features=false drops the `kb` feature → no alzina-memory/alzina-workspace.
-# Direct path dep because workspace inheritance cannot disable default features.
-alzina-search = { path = "../alzina-search", default-features = false }
+alzina-orchestration = { path = "../alzina-orchestration" }
+# Literature-synthesis search path only — no alzina-memory/alzina-workspace.
+alzina-search = { path = "../alzina-search" }
 alzina-core = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 async-trait = { workspace = true }

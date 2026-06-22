@@ -124,7 +124,7 @@ pub fn assess_quality(
 /// Build a degradation reason string from a failed quality report. Returns
 /// `None` when `report.passed == true`. Consumers concatenate this with any
 /// pre-existing `degradation_reason` (typically the FTS / vector lane reasons
-/// produced by [`crate::hybrid::HybridSearchService`]).
+/// produced by the hybrid search service).
 ///
 /// Takes `hit_count` alongside the report so we can determine which gates
 /// were ACTIVE (the diversity-style gates are inactive when `hit_count < 3`,

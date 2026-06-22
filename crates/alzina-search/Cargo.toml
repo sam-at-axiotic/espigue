@@ -5,15 +5,11 @@ edition.workspace = true
 publish = false
 description = "Embedding-backed literature search (RRF fusion, rerank, vec store)."
 
-[features]
 # Standalone extraction: the daily-memory / knowledge-base (`kb`) path —
-# HybridSearchService, kb_index, watcher, manifest, Qdrant migration — is NOT
+# HybridSearchService, kb_index, watcher, manifest, Qdrant migration — was NOT
 # vendored. It depended on alzina-memory (→ alzina-workspace) + notify/fs2/
-# qdrant-client, none of which ship here. `kb` is a declared (always-off) stub
-# so the `#[cfg(feature = "kb")]` modules stay a known cfg; enabling it will not
-# compile. Only the literature-synthesis path is active.
-default = []
-kb = []
+# qdrant-client, none of which ship here. Those always-off `kb`-gated modules
+# have been removed; only the literature-synthesis path remains.
 
 [dependencies]
 alzina-core = { workspace = true }

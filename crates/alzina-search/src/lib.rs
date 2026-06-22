@@ -55,46 +55,6 @@ pub use lit_schema::in_memory_lit_pool;
 pub use embed_cache::EmbeddingCache;
 pub use sqlite_vec::SqliteVecStore;
 
-// ── Phase 2 module registration (Task 2.7) ────────────────────────────
-// `SearchIndexer` is the fire-and-forget wrapper called by the write
-// path to embed + upsert into the vector store without blocking the
-// primary INSERT. Failures are swallowed and reconciled by the
-// backfill job (Task 2.9). KB-only → gated behind `kb`.
-#[cfg(feature = "kb")]
-pub mod indexer;
-#[cfg(feature = "kb")]
-pub use indexer::SearchIndexer;
-
-// ── Tasks 2.6 + 2.8 + 2.12: hybrid search service ─────────────────────
-// `HybridSearchService` fuses FTS5 + vector via RRF, applies recency
-// weighting, and routes degradation upward. The `fts_only` constructor
-// covers the no-API-key path (Task 2.12) — every call from that mode
-// emits a degraded envelope. KB-only (reads alzina-memory FTS) → gated.
-#[cfg(feature = "kb")]
-pub mod hybrid;
-#[cfg(feature = "kb")]
-pub use hybrid::{Collection, HybridConfig, HybridSearchService};
-
-// ── Phase 2 module registration (Task 2.9) ────────────────────────────
-// `BackfillJob` reconciles the vector index against canonical source
-// tables — covers first-rollout catch-up, post-failure reconciliation,
-// and full re-index after a model change. Distinct from the FTS5
-// `BackfillReport` in `alzina_memory::schema`; namespace separation
-// disambiguates. KB-only → gated.
-#[cfg(feature = "kb")]
-pub mod backfill;
-#[cfg(feature = "kb")]
-pub use backfill::{BackfillConfig, BackfillJob, BackfillReport};
-
-// ── Phase 3 module registration (Task 3.1) ────────────────────────────
-// `chunk_markdown` splits KB articles into heading-aware embeddable
-// units. Pure logic — no DB, no async. Consumed by the KbIndexer
-// (Task 3.3) which feeds chunks into `EmbeddingService::embed`. KB-only.
-#[cfg(feature = "kb")]
-pub mod chunking;
-#[cfg(feature = "kb")]
-pub use chunking::{Chunk, ChunkConfig, chunk_markdown};
-
 // ── Phase 3 module registration (Task 3.7) ────────────────────────────
 // `quality` evaluates a result set against synthesis §5.7 thresholds
 // (per-result relevance, mean relevance, source concentration, unique
@@ -104,17 +64,6 @@ pub use chunking::{Chunk, ChunkConfig, chunk_markdown};
 // even when the underlying lanes ran cleanly.
 pub mod quality;
 pub use quality::{QualityThresholds, assess_quality, quality_degradation_reason};
-
-// ── Phase 3 module registration (Task 3.2) ────────────────────────────
-// `KbManifest` tracks per-file content hashes in `kb/INDEX.toml` so the
-// upcoming `KbIndexer` (Task 3.3) only re-embeds files that actually
-// changed since the last run. AC-1: load failures (parse errors,
-// version-too-new) surface as `AlzinaError::Search` with `degraded=true`.
-// KB-only → gated.
-#[cfg(feature = "kb")]
-pub mod manifest;
-#[cfg(feature = "kb")]
-pub use manifest::{FileEntry, KbManifest, MANIFEST_FILE, MANIFEST_VERSION, ManifestData};
 
 // ── Phase 3 module registration (Task 3.8) ────────────────────────────
 // `S2Client` is an opt-in (`S2_LIVE_ENABLED=true`) Semantic Scholar
@@ -167,41 +116,6 @@ pub use arxiv::{ArxivClient, ArxivConfig, ArxivFullText, ArxivResult};
 // chunker — because ar5iv gives real section structure to exploit.
 pub mod lit_chunking;
 pub use lit_chunking::{LitChunk, LitChunkConfig, chunk_ar5iv_html, chunk_plain_text};
-
-// ── Phase 3 module registration (Task 3.3) ────────────────────────────
-// `KbIndexer` indexes KB Markdown files into the vector store and
-// FTS5 — chunks via heading boundaries, embeds cache-then-API, and
-// updates the per-file manifest. This slice ships only the per-file
-// path (`index_file` / `remove_file`); the directory-walk `run()`
-// follows in 3.3-followup. AC-1: every error is `AlzinaError::Search`
-// with `degraded = true`. KB-only (reads alzina-memory FTS) → gated.
-#[cfg(feature = "kb")]
-pub mod kb_index;
-#[cfg(feature = "kb")]
-pub use kb_index::{KbIndexConfig, KbIndexer, KbRunReport};
-
-// ── Phase 3 module registration (Task 3.4) ────────────────────────────
-// `KbWatcher` watches `kb_root` for `.md` create/modify/delete events
-// and dispatches to the indexer on a 2-second per-path debounce. Not
-// yet wired into the daemon — that's a follow-up. KB-only → gated.
-#[cfg(feature = "kb")]
-pub mod watcher;
-#[cfg(feature = "kb")]
-pub use watcher::{DEFAULT_DEBOUNCE, KbWatcher, KbWatcherHandle};
-
-// ── Phase 3 module registration (Task 3.12) ───────────────────────────
-// `QdrantMigration` reads the existing Norn-Weave Qdrant collection
-// (`literature_chunks` under
-// `/Users/samj/clawd/skills/lit-review/cache/qdrant/`) and re-indexes
-// it into the local `SqliteVecStore`. The daemon never depends on
-// Qdrant at runtime — only this opt-in migration helper does. AC-1:
-// connection / fatal scroll errors return `AlzinaError::Search` with
-// `degraded = true`; per-point failures land in the report.
-// KB-only (opt-in migration tool, pulls qdrant-client) → gated.
-#[cfg(feature = "kb")]
-pub mod qdrant_migration;
-#[cfg(feature = "kb")]
-pub use qdrant_migration::{QdrantMigration, QdrantMigrationConfig, QdrantMigrationReport};
 
 // ── Literature gateway (2026-06-11) ──────────────────────────────────────
 // Single chokepoint for external literature traffic: per-endpoint token
