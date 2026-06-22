@@ -5,8 +5,9 @@ Topic in, cited literature review out.
 `espigue` is a standalone command-line tool that turns a research question into
 a structured, citation-grounded literature review. It searches arXiv and Semantic
 Scholar (and your own documents), grounds every claim in retrieved sources, and
-synthesises a review built around the *tensions* in a field. One
-`OPENROUTER_API_KEY` drives generation, embeddings, and reranking.
+surfaces a field's areas of disagreement and open gaps — using them to drive
+further, targeted literature search. One `OPENROUTER_API_KEY` drives generation,
+embeddings, and reranking.
 
 Two things set it apart. **Every citation and quote is mechanically verified
 against the real source text** — a deterministic check, not the model's word — so
@@ -17,7 +18,8 @@ anything you ingest, accumulates into a queryable memory of a field that you own
 The draft stage is an **evolutionary search**, not a single pass: a population of
 parallel expert drafts competes under adversarial judges, the weakest are culled
 for drifting from their sources, and survivors are rewritten round by round with
-fresh evidence until the fittest is fused into the final review.
+evidence retrieved to close the gaps and disagreements they expose — until the
+fittest is fused into the final review.
 
 It has been evaluated end-to-end with **Haiku driving that draft swarm and a
 single Opus 4.8 call to merge** — the surprising part is how much quality holds
