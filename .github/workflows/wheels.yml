@@ -1,4 +1,4 @@
-# Build + publish `litreview` wheels across platforms.
+# Build + publish `espigue` wheels across platforms.
 #
 # Triggers on a `v*` tag (build + publish) or manual dispatch (build only).
 # Publishing uses PyPI trusted publishing (OIDC) — configure this repo as a
@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  MATURIN_WORKDIR: crates/litreview-cli
+  MATURIN_WORKDIR: crates/espigue
 
 jobs:
   linux:

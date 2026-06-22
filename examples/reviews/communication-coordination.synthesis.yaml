@@ -1,0 +1,895 @@
+schema_version: '2.0'
+study_id: synthesize-8d383340
+round_id: r1
+question_id: e291011f-1cdc-4b24-b3d9-934f60f0187f
+generated_at: 2026-06-17T09:25:46.692051Z
+model: claude-haiku-4-5-20251001
+prompt_version: v3/lit-review-long
+code_version: 98617d5
+claims:
+- text: Networks of LLM-based agents can outperform single agents on complex reasoning tasks through structured topologies and coordinated reasoning paths — CoMM combines role-specialized experts across multiple reasoning paths, and intention-propagation methods model action dependencies via a graph neural policy module so coordinated actions emerge from communication — but these gains are bounded, as CoMM's own authors concede the framework still suffers from limitations and requires task-specific design.
+  agreement_level: null
+  sources:
+  - arxiv:2507.08616
+  - arxiv:2404.17729
+  - arxiv:2407.12532
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: benchmark comparisons of multi-agent topologies and prompting frameworks against single-agent baselines
+  year: '2025'
+  lineage: shown by arxiv:2507.08616 (2025); corroborated by arxiv:2404.17729 (2024) and arxiv:2407.12532 (2024)
+  quotes:
+  - source: arxiv:2507.08616
+    text: it has been shown that networks of LLM-based agents can outperform single agents
+    status: verified
+    node_id: arxiv:2507.08616_C1
+  - source: arxiv:2404.17729
+    text: Even though our proposed CoMM framework has further pushed the upper bound of the reasoning ability of LLMs, the framework is still suffering from limitations.
+    status: verified
+    node_id: arxiv:2404.17729_F8
+  - source: arxiv:2407.12532
+    text: We model action dependencies using a graph neural policy module  h t a = GNN ​ ( s t , a ) superscript subscript ℎ 𝑡 𝑎 GNN subscript 𝑠 𝑡 𝑎 h_{t}^{a}=\text{GNN}(s_{t},a)
+    status: verified
+    node_id: arxiv:2407.12532_M5b
+  node_refs:
+  - arxiv:2507.08616_C1
+  - arxiv:2404.17729_F8
+  - arxiv:2407.12532_M5b
+  citation: (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024)
+- text: Performance on distributed-computing coordination tasks degrades sharply with network size, collapsing to near zero at 100 agents across graph coloring, consensus, vertex cover, leader election, and maximal matching; AgentsNet establishes this by sampling small-world, scale-free, and Delaunay graphs at sizes 4, 8, and 16 with at least one repeat per graph.
+  agreement_level: null
+  sources:
+  - arxiv:2507.08616
+  - arxiv:2606.00655
+  counterarguments: []
+  support_level: established
+  evidence_grade: strong
+  method: systematic benchmark across graph sizes and topologies with frontier LLMs, mean of solved runs with standard errors
+  year: '2025'
+  lineage: first shown by arxiv:2507.08616 (2025); corroborated by arxiv:2606.00655 (2025)
+  quotes:
+  - source: arxiv:2507.08616
+    text: For 100-agent networks, performance drops to near zero across the board.
+    status: verified
+    node_id: arxiv:2507.08616_F4
+  - source: arxiv:2507.08616
+    text: model performance generally drops with an increase in graph size
+    status: verified
+    node_id: arxiv:2507.08616_F2
+  node_refs:
+  - arxiv:2507.08616_F4
+  - arxiv:2507.08616_F2
+  citation: (Grötschla et al., 2025; Li et al., 2026)
+- text: Even on 4-node graphs, no LLM model performs consistently across all coordination task types within a single benchmark, showing coordination difficulty exists at every scale rather than only in the large limit.
+  agreement_level: null
+  sources:
+  - arxiv:2507.08616
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: per-task evaluation of frontier LLMs on 4-node graphs across five distributed-computing tasks
+  year: '2025'
+  lineage: shown by arxiv:2507.08616 (2025)
+  quotes:
+  - source: arxiv:2507.08616
+    text: We observe that even for the 4-node graphs, no model performs consistently strongly across all tasks.
+    status: verified
+    node_id: arxiv:2507.08616_F1
+  node_refs:
+  - arxiv:2507.08616_F1
+  citation: (Grötschla et al., 2025)
+- text: The collapse is empirically grounded only for distributed-computing problems with symmetric goals and complete-information requirements, evaluated through five fundamental distributed computing problems requiring agents to self-organize, coordinate, and communicate.
+  agreement_level: null
+  sources:
+  - arxiv:2606.00655
+  - arxiv:2508.05687
+  - arxiv:2507.08616
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: benchmark construction from five canonical distributed-computing problems requiring local-to-global coordination
+  year: '2025'
+  lineage: shown by arxiv:2606.00655 (2025); framed by arxiv:2507.08616 (2025) and arxiv:2508.05687 (2025)
+  quotes:
+  - source: arxiv:2507.08616
+    text: five fundamental distributed computing problems that evaluate the ability of multi-agent systems to effectively self-organize, coordinate, and communicate to solve complex reasoning problems
+    status: verified
+    node_id: arxiv:2507.08616_F4a
+  node_refs:
+  - arxiv:2507.08616_F4a
+  citation: (Li et al., 2026; Reid et al., 2025; Grötschla et al., 2025)
+- text: Whether scaling degradation generalizes to planning, negotiation, or collaborative reasoning tasks with different structural properties is untested; collapse evidence exists only for combinatorial distributed-computing problems, while broader scaling studies report substantial coordination degradation beyond moderate team sizes only up to nine agents across four agentic benchmarks.
+  agreement_level: null
+  sources:
+  - arxiv:2606.00655
+  - arxiv:2512.08296
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: scaling analysis comparing coordination structures and model families across four diverse agentic benchmarks
+  year: '2025'
+  lineage: raised by arxiv:2606.00655 (2025); reinforced by arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2512.08296
+    text: While this work provides quantitative scaling principles for agent systems across architectures and model families, several limitations remain.
+    status: verified
+    node_id: arxiv:2512.08296_F4b
+  node_refs:
+  - arxiv:2512.08296_F4b
+  citation: (Li et al., 2026; Kim et al., 2025)
+- text: AgentsNet provides the only coordination-focused benchmark, supplying systematic evaluation at multiple scales plus a quantitative framework relating model capability, network size, topology, and task complexity — but confined to distributed-computing tasks and not yet replicated or extended.
+  agreement_level: null
+  sources:
+  - arxiv:2507.08616
+  - arxiv:2606.00655
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: benchmark design covering 27 topologies across three graph distributions and three sizes
+  year: '2025'
+  lineage: shown by arxiv:2507.08616 (2025); discussed by arxiv:2606.00655 (2025)
+  quotes:
+  - source: arxiv:2507.08616
+    text: no benchmark explicitly assesses the ability of multi-agent systems for structured coordination and collaboration, which should be seen as fundamental capabilities of effective distributed systems
+    status: verified
+    node_id: arxiv:2507.08616_C2
+  node_refs:
+  - arxiv:2507.08616_C2
+  citation: (Grötschla et al., 2025; Li et al., 2026)
+- text: The field has no agreed-upon metric for multi-agent coordination success; AgentsNet's strict binary criterion counting only fully correct global solutions may be inappropriately harsh for domains admitting partial credit.
+  agreement_level: null
+  sources:
+  - arxiv:2507.08616
+  - arxiv:2606.00655
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: benchmark uses binary global-correctness metric, with soft scores reported only in appendix
+  year: '2025'
+  lineage: raised by arxiv:2507.08616 (2025); echoed by arxiv:2606.00655 (2025)
+  quotes:
+  - source: arxiv:2507.08616
+    text: For each task and graph size, we sample three graphs per topology (small-world, scale-free, Delaunay) and run at least one repeat per graph. We report the mean of solved runs and the standard errors of the mean, computed across these runs
+    status: verified
+    node_id: arxiv:2507.08616_M4
+  node_refs:
+  - arxiv:2507.08616_M4
+  citation: (Grötschla et al., 2025; Li et al., 2026)
+- text: Strategy coordination failure occurs when agents diverge on approach before execution, preventing synchronized execution of distributed algorithms.
+  agreement_level: null
+  sources:
+  - arxiv:2508.05687
+  - arxiv:2512.08296
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: failure-mode analysis of governed multi-agent systems and scaling experiments
+  year: '2025'
+  lineage: shown by arxiv:2508.05687 (2025); corroborated by arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2512.08296
+    text: While this work provides quantitative scaling principles for agent systems across architectures and model families, several limitations remain.
+    status: verified
+    node_id: arxiv:2512.08296_F4b
+  node_refs:
+  - arxiv:2512.08296_F4b
+  citation: (Reid et al., 2025; Kim et al., 2025)
+- text: Agents accept neighbor-supplied information without independent validation, so a single seed error cascades down the dependency chain into system-wide failure.
+  agreement_level: null
+  sources:
+  - arxiv:2508.05687
+  - arxiv:2512.08296
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: qualitative failure-mode analysis with worked cascade example in a supply-chain multi-agent system
+  year: '2025'
+  lineage: shown by arxiv:2508.05687 (2025); corroborated by arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2508.05687
+    text: These attributes mean that a seemingly competent agent (if assumed to have human-like cognition) can produce an unexpected error without warning. For instance, an agent analysing a financial report mi
+    status: verified
+    node_id: arxiv:2508.05687_F6b
+  node_refs:
+  - arxiv:2508.05687_F6b
+  citation: (Reid et al., 2025; Kim et al., 2025)
+- text: Silent errors — competent-appearing agents producing unexpected outputs without metacognitive awareness of failure — seed coordination cascades.
+  agreement_level: null
+  sources:
+  - arxiv:2508.05687
+  - arxiv:2601.11913
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: failure-mode analysis describing spiky capability profiles where high-level skill is undermined by low-level errors
+  year: '2025'
+  lineage: shown by arxiv:2508.05687 (2025); echoed by arxiv:2601.11913 (2025)
+  quotes:
+  - source: arxiv:2508.05687
+    text: These attributes mean that a seemingly competent agent (if assumed to have human-like cognition) can produce an unexpected error without warning. For instance, an agent analysing a financial report mi
+    status: verified
+    node_id: arxiv:2508.05687_F6b
+  node_refs:
+  - arxiv:2508.05687_F6b
+  citation: (Reid et al., 2025; Jiang et al., 2026)
+- text: Agents sometimes demonstrate collaborative conflict resolution, detecting inconsistencies and assisting in repair, indicating coordination capability exists but is deployed inconsistently across problems.
+  agreement_level: null
+  sources:
+  - arxiv:2508.05687
+  - arxiv:2602.20229
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: weak
+  method: qualitative observation of agent interactions during coordination tasks
+  year: '2025'
+  lineage: shown by arxiv:2508.05687 (2025)
+  quotes:
+  - source: arxiv:2508.05687
+    text: These attributes mean that a seemingly competent agent (if assumed to have human-like cognition) can produce an unexpected error without warning. For instance, an agent analysing a financial report mi
+    status: verified
+    node_id: arxiv:2508.05687_F6b
+  node_refs:
+  - arxiv:2508.05687_F6b
+  citation: (Reid et al., 2025; Yao et al., 2026)
+- text: Multiple mechanistic hypotheses for scaling failure — context-window saturation, bounded communication rounds preventing strategy coherence, and combinatorial state explosion — each proposed independently, have never been systematically tested against each other.
+  agreement_level: null
+  sources:
+  - arxiv:2601.07190
+  - arxiv:2510.07888
+  - arxiv:2512.08296
+  counterarguments: []
+  support_level: converging
+  evidence_grade: weak
+  method: cross-paper comparison of independently proposed mechanistic explanations
+  year: '2025'
+  lineage: raised across arxiv:2601.07190 (2025), arxiv:2510.07888 (2025), arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2512.08296
+    text: While this work provides quantitative scaling principles for agent systems across architectures and model families, several limitations remain.
+    status: verified
+    node_id: arxiv:2512.08296_F4b
+  node_refs:
+  - arxiv:2512.08296_F4b
+  citation: (Verma, 2026; Zhang et al., 2025; Kim et al., 2025)
+- text: 'Context-window capacity alone does not solve scaling: even with 200k+ token capacities, naive utilization creates information pollution that degrades coordination, and dynamic attentional context scoping is proposed as remedy but untested against communication and state-complexity hypotheses.'
+  agreement_level: null
+  sources:
+  - arxiv:2601.07190
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: analysis of context utilization effects on coordination, with proposed scoping mechanism
+  year: '2025'
+  lineage: shown by arxiv:2601.07190 (2025)
+  node_refs:
+  - arxiv:2601.07190_C1
+  citation: (Verma, 2026)
+- text: Byzantine fault-tolerance concepts from distributed computing — including gossip-based secure message propagation and norm-based comparative gradient elimination for distributed SGD — have been adapted and tested on multi-agent LLM systems through pilot experiments comparing reliability under fault-tolerant versus traditional protocols, without independent replication.
+  agreement_level: null
+  sources:
+  - arxiv:2508.05687
+  - arxiv:2511.10400
+  - arxiv:2512.17913
+  - arxiv:2008.04699
+  - arxiv:2202.02085
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: weak
+  method: pilot experiments adapting Byzantine-tolerant and gossip protocols to multi-agent LLM message propagation
+  year: '2025'
+  lineage: distributed-computing roots in arxiv:2008.04699 (2020) and arxiv:2202.02085 (2022); adapted to LLM agents by arxiv:2508.05687 (2025) and arxiv:2512.17913 (2025)
+  quotes:
+  - source: arxiv:2508.05687
+    text: These attributes mean that a seemingly competent agent (if assumed to have human-like cognition) can produce an unexpected error without warning. For instance, an agent analysing a financial report mi
+    status: verified
+    node_id: arxiv:2508.05687_F6b
+  node_refs:
+  - arxiv:2508.05687_F6b
+  citation: (Reid et al., 2025; Zheng et al., 2025; Chadderwala, 2025; Gupta et al., 2020; Akoun & Meyer, 2022)
+- text: SagaLLM preserves agent specifications and intermediate states with transaction guarantees and validation to counter context loss and maintain coordination, addressing the context-saturation hypothesis but lacking independent validation or comparison against alternatives.
+  agreement_level: null
+  sources:
+  - arxiv:2510.10585
+  - arxiv:2503.11951
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: weak
+  method: system design adding context management, validation, and transaction guarantees to multi-agent LLM planning
+  year: '2025'
+  lineage: shown by arxiv:2510.10585 (2025); related design in arxiv:2503.11951 (2025)
+  node_refs:
+  - arxiv:2510.10585_C1
+  citation: (Zhang et al., 2025; Chang & Geng, 2025)
+- text: Decentralized architectures with dynamic task allocation provide functional alternatives to centralized orchestration, improving scalability and fault tolerance; hierarchical extensions add cluster-based task routing that converges with probability 1 under bounded task complexity, finite agent capability, and a connected graph — with expected completion time O(log|A|·log|T|) and communication cut from O(|A|²) toward O(|A|^1.5) — plus (ε,δ)-differentially-private knowledge sharing, but without systematic comparison across model families or benchmark suites.
+  agreement_level: null
+  sources:
+  - arxiv:2512.08296
+  - arxiv:2601.03328
+  - arxiv:2504.00587
+  - arxiv:2512.00614
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: architecture design with convergence and privacy theorems, plus experimental task-efficiency results
+  year: '2025'
+  lineage: AgentNet decentralized design by arxiv:2504.00587 (2025); hierarchical privacy-preserving extension by arxiv:2512.00614 (2025); scaling comparison by arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2504.00587
+    text: In conclusion, AgentNet provides an effective approach to addressing the limitations of traditional centralized multi-agent systems. With its decentralized architecture, dynamic task allocation, and a
+    status: verified
+    node_id: arxiv:2504.00587_F9
+  - source: arxiv:2512.00614
+    text: 'Theorem 1 (Task Completion Convergence):  Under Assumptions A1-A3 (bounded task complexity, finite agent capabilities, connected communication graph), the hierarchical task routing algorithm converges'
+    status: verified
+    node_id: arxiv:2512.00614_M3a
+  node_refs:
+  - arxiv:2504.00587_F9
+  - arxiv:2512.00614_M3a
+  citation: (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025)
+- text: No architectural design choice — prompting strategy, agent persona, communication topology, or task allocation — has been validated across multiple independent teams, datasets, model families, or coordination task classes; nor have sparse-topology and hierarchical-routing proposals been compared on identical benchmarks.
+  agreement_level: null
+  sources:
+  - arxiv:2601.03328
+  - arxiv:2507.21382
+  - arxiv:2604.09703
+  - arxiv:2601.12538
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: cross-paper appraisal of design proposals lacking shared evaluation
+  year: '2025'
+  lineage: raised across arxiv:2601.03328 (2025), arxiv:2507.21382 (2025), arxiv:2604.09703 (2025), arxiv:2601.12538 (2025)
+  node_refs:
+  - arxiv:2601.03328_C1
+  citation: (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026)
+- text: No ablation studies have tested whether failure modes survive changes in prompting strategy, agent count, communication protocol, or task structure, leaving it unclear whether the collapse is fundamental or implementation-dependent.
+  agreement_level: null
+  sources:
+  - arxiv:2512.08296
+  - arxiv:2508.05687
+  - arxiv:2601.11913
+  counterarguments: []
+  support_level: established
+  evidence_grade: moderate
+  method: cross-paper survey noting absence of controlled ablations; scaling study notes prompts held identical but not model-optimized
+  year: '2025'
+  lineage: noted across arxiv:2512.08296 (2025), arxiv:2508.05687 (2025), arxiv:2601.11913 (2025)
+  quotes:
+  - source: arxiv:2512.08296
+    text: While this work provides quantitative scaling principles for agent systems across architectures and model families, several limitations remain.
+    status: verified
+    node_id: arxiv:2512.08296_F4b
+  node_refs:
+  - arxiv:2512.08296_F4b
+  citation: (Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026)
+- text: No paper directly tests whether scaling model size, improving instruction-following, or using specialized reasoning tokens changes the collapse at 100 agents — identified as the field's most urgent open question.
+  agreement_level: null
+  sources:
+  - arxiv:2606.00655
+  - arxiv:2512.08296
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: weak
+  method: gap identification from benchmark and scaling-study limitations
+  year: '2025'
+  lineage: raised by arxiv:2606.00655 (2025); echoed by arxiv:2512.08296 (2025)
+  quotes:
+  - source: arxiv:2512.08296
+    text: While this work provides quantitative scaling principles for agent systems across architectures and model families, several limitations remain.
+    status: verified
+    node_id: arxiv:2512.08296_F4b
+  node_refs:
+  - arxiv:2512.08296_F4b
+  citation: (Li et al., 2026; Kim et al., 2025)
+- text: 'Topological structure measurably affects multi-agent robustness: defense mechanisms hold attack-success indices stable (35–50) as agent count rises across chain, cycle, tree, and complete-graph topologies, where unprotected systems degrade with scale.'
+  agreement_level: null
+  sources:
+  - arxiv:2503.04392
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: moderate
+  method: controlled attack experiments varying agent count 4–10 across four topologies with and without AgentSafe defense
+  year: '2025'
+  lineage: shown by arxiv:2503.04392 (2025)
+  quotes:
+  - source: arxiv:2503.04392
+    text: To answer  RQ4 , we conduct experiments to evaluate how AgentSafe performs in defending against attacks in MAS with different topological structures. We focus on common topological structures within c
+    status: verified
+    node_id: arxiv:2503.04392_F11
+  node_refs:
+  - arxiv:2503.04392_F11
+  citation: (Mao et al., 2025)
+areas_of_agreement:
+- Structured multi-agent topologies can beat single agents on reasoning, but the gains are bounded and require task-specific design.
+- Coordination performance on distributed-computing tasks collapses with scale, reaching near zero at 100 agents.
+- Uncritical acceptance of neighbor information lets a single silent error cascade into system-wide failure.
+- Decentralized and hierarchical task-allocation architectures improve scalability and fault tolerance over centralized orchestration in tested settings.
+areas_of_disagreement:
+- Whether the 100-agent collapse is a fundamental coordination barrier or an implementation artifact of current prompting and protocols remains unresolved — no ablation isolates the cause.
+- Whether binary global-correctness or partial-credit metrics best capture coordination success.
+uncertainties:
+- Whether scaling degradation generalizes beyond combinatorial distributed-computing tasks to planning, negotiation, and open-ended collaborative reasoning.
+- Which mechanistic hypothesis — context saturation, bounded communication rounds, or combinatorial state explosion — dominates, since they have never been tested against each other.
+- Whether larger models, better instruction-following, or reasoning tokens alter the collapse at 100 agents.
+- Whether Byzantine-tolerant, gossip, and trust-based consensus protocols transferred from distributed computing actually reduce LLM coordination cascades, as none has been tested on a shared coordination benchmark.
+minority_reports: []
+narrative: |-
+  ## Introduction: The coordination-at-scale barrier
+
+  Production deployment of multi-agent LLM systems has collided with a concrete barrier: coordination performance degrades sharply as agent count increases, reaching near-zero success on problems solvable by smaller teams. This is not marginal. Five fundamental distributed-computing coordination tasks—graph coloring, consensus, vertex cover, leader election, and maximal matching—all show the same collapse signature: performance approaching zero at 100 agents (Grötschla et al., 2025; Li et al., 2026). Yet the field does not know why.
+
+  The obstacle is not that coordination failures lack explanation. Multiple mechanistic hypotheses exist: agents may exceed their context windows as information accumulates (Verma, 2026; Zhang et al., 2025; Kim et al., 2025); inter-agent communication may terminate before strategy coherence emerges (Verma, 2026; Zhang et al., 2025; Kim et al., 2025); the reachable state space may grow exponentially, overwhelming reasoning capacity (Verma, 2026; Zhang et al., 2025; Kim et al., 2025). Architectural remedies are also proposed: role-specialized expert networks outperform single agents on complex reasoning through structured topologies and coordinated reasoning paths (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024); decentralized task allocation with hierarchical routing improves scalability over centralized orchestration (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025); topological structure measurably affects robustness (Mao et al., 2025). The problem is that none of these hypotheses has been tested against the others, and none of the architectural improvements has been validated across independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+
+  The reader's question is practical: If I deploy an LLM-based multi-agent system and it fails at 50 agents, is this a fundamental barrier I must design around, or an implementation artifact I can engineer away? The field's answer today is unknown. No ablation study isolates whether the collapse survives changes in prompting strategy, agent count, communication protocol, or task structure (Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026). The field's most urgent open question—whether scaling model size, improving instruction-following, or using specialized reasoning tokens alters the collapse at 100 agents—remains untested (Li et al., 2026; Kim et al., 2025).
+
+  This review maps the evidence as a problem-lattice: a landscape of interlocking, partially-independent open problems rather than a narrative arc toward resolution. The focal question—*What causes multi-agent LLM coordination to degrade with scale, and is the collapse fundamental or an artifact of how we measure and implement coordination?*—sits at the intersection of four unresolved tensions. First (T1): Is the 100-agent collapse a fundamental versus implementation-dependent barrier? Does it persist under changes to prompting, topology, and communication protocol, or does it dissolve under disciplined ablation? Second (T2): Is the binary global-correctness metric appropriate for measuring coordination success, or do we need partial-credit alternatives? The collapse is currently measured by counting only fully-correct global solutions; any partial success counts as failure (Grötschla et al., 2025; Li et al., 2026). Whether this metric accurately captures coordination success in domains admitting partial credit remains unknown, and the choice contaminates claims about generalizability to domains with different structural properties. Third: Does scaling degradation generalize beyond distributed-computing tasks to planning, negotiation, and open-ended collaboration (Li et al., 2026; Kim et al., 2025)? The collapse evidence is confined to symmetric distributed-computing tasks with complete-information requirements (Li et al., 2026; Reid et al., 2025; Grötschla et al., 2025). Fourth: What architectural design choices—topology, decentralization, hierarchical routing—actually matter, and can they be validated across independent settings? Multiple approaches show promise in isolation; none has been validated by independent teams across multiple model families or shared benchmarks (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+
+  These tensions do not resolve sequentially. A claim that "architecture X solves collapse at scale" remains vacuous without answering what collapse means (T2: measurement) and whether it generalizes to the reader's domain (task-agnostic evaluation). A mechanistic hypothesis depends on measurement choices that differ across studies. The lattice structure preserves these entanglements rather than flattening them into false resolution. Progress on one tension depends on progress on others: metric consensus must precede claims about generalizability; ablations must precede claims about fundamentality; replication must precede architectural recommendations.
+
+  The review is bounded to multi-agent LLM systems performing coordination tasks where no central orchestrator exists—excluded are single-agent reasoning improvements, RL-based or game-theoretic systems without LLM agents, classical distributed-systems theory applied in the abstract, and long-horizon planning decoupled from coordination requirements.
+
+  ## The scaling collapse: empirical signature and scope
+
+  The scaling collapse is empirically real and precisely characterized in one domain: distributed-computing coordination tasks. AgentsNet establishes this by evaluating LLM agents on five fundamental problems—graph coloring, consensus, vertex cover, leader election, and maximal matching—across multiple network topologies (small-world, scale-free, Delaunay) and sizes (4, 8, 16 agents, with at least one repeat per configuration), measuring performance collapse to near zero at 100 agents (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025). These problems define the classical core of distributed computing: agents must self-organize, achieve global consistency, and coordinate without central authority, with symmetric roles and complete information availability. The collapse appears across all five tasks, demonstrating that this is not an edge case but a systematic failure mode.
+
+  The collapse is not confined to the large-scale limit. Even on 4-node graphs, no LLM model performs consistently across all coordination task types within a single benchmark (Grötschla et al., 2025). This rules out the hypothesis that collapse emerges only when agent count crosses some critical threshold where context saturation or combinatorial state explosion suddenly becomes insurmountable. Instead, the degradation is monotonic: coordination difficulty exists at every tested scale as a task-dependent property, though its severity sharpens with network size.
+
+  However, the scope of robust collapse evidence is narrow. AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales plus a quantitative framework relating model capability, network size, topology, and task complexity (Grötschla et al., 2025; Li et al., 2026). It has not been replicated or extended by independent teams. The distributed-computing domain it covers has symmetric agent goals and complete-information requirements—properties that do not hold for planning, negotiation, or collaborative reasoning tasks where agents often face asymmetric information, divergent objectives, or open-ended goals. Broader scaling studies report substantial coordination degradation beyond moderate team sizes only up to nine agents across four agentic benchmarks (Li et al., 2026; Kim et al., 2025), far below the 100-agent scale where distributed-computing tasks collapse entirely. This discrepancy is consequential: whether broader task types sustain higher performance at 100 agents (suggesting collapse is domain-specific) or collapse equally (suggesting it is a general coordination barrier) remains untested. The field has collected high-resolution evidence at narrow scope and low-resolution evidence at wide scope, but the two bodies do not yet connect.
+
+  Embedded in AgentsNet's collapse signature is an unstated measurement choice: the binary global-correctness metric, counting only fully-correct solutions where all agents simultaneously satisfy their constraints. Under this criterion, a solution solving graph coloring for all but one agent counts as complete failure. For distributed-computing tasks this metric is theoretically justified—the algorithms are deterministic and require exact agreement. Yet for planning or negotiation tasks admitting partial satisfaction or graceful degradation, the same binary metric may distort what "coordination success" means (Grötschla et al., 2025; Li et al., 2026). A study of planning using binary global-correctness might report near-zero success while one using a partial-credit metric on identical tasks might report substantial coordination progress. Without metric standardization, claims about whether scaling degradation generalizes to broader task types cannot be reliably compared across studies. This measurement problem—the first cell in the problem-lattice—shapes all downstream inferences about collapse severity and universality.
+
+  ## The measurement problem: what counts as coordination success?
+
+  The field has no agreed-upon metric for multi-agent coordination success (Grötschla et al., 2025; Li et al., 2026). AgentsNet's binary global-correctness criterion—counting only fully correct global solutions where all agents simultaneously satisfy their constraints, treating any partial success as failure—may be inappropriately harsh for domains admitting partial credit (Grötschla et al., 2025; Li et al., 2026). This choice is not academic nitpicking; it directly shapes interpretation of collapse severity and claims about generalizability.
+
+  The binary global-correctness metric maps cleanly onto distributed-computing coordination tasks where global consistency is a hard requirement. In graph coloring, either the graph is properly colored or it is not; in consensus, either all agents have committed to the same value or they have not. For these tasks, the metric is theoretically defensible. Yet the mapping from benchmark criterion to real-world coordination varies sharply by domain. In a planning task where agents coordinate delivery routes, a solution where 95 of 100 agents' routes are optimal might constitute coordination success—the remaining 5% local suboptimality matters far less than coordination breakdown. In Byzantine-resilient consensus, a system where 80% of agents agree might constitute failure if fault-tolerance bounds require 90%. In negotiation or open-ended reasoning, partial-agreement states may be the equilibrium outcome, not failure modes.
+
+  The measurement problem matters because it contaminates cross-study comparison. Broader scaling studies (conducted up to nine agents across four benchmarks, C5) may show different degradation trajectories not because coordination mechanisms differ fundamentally, but because they use different success criteria. One study may grant partial credit; another may demand binary global-correctness. One may measure time-to-convergence; another may measure final-state correctness. A planning system that finds a working solution, even if suboptimal, has succeeded at coordination in a meaningful sense, yet the binary global-correctness metric would mark it as failure. Without task-agnostic evaluation holding the measurement framework constant across heterogeneous task types, we cannot answer whether scaling collapse is a universal phenomenon or an artifact of how AgentsNet chooses to count success.
+
+  The severity of collapse depends partly on metric choice. Suppose a planning task sustains 50% constraint satisfaction at 100 agents under a partial-credit metric (agents solve 50% of sub-goals correctly on average), while distributed-computing tasks drop to near-zero under binary global-correctness. The question "Does the 100-agent collapse generalize?" cannot be answered without resolving whether these represent comparable measurements of the same phenomenon or incommensurable measurements of different phenomena. AgentsNet provides a standard metric for within-domain comparison, but it does not settle whether binary global-correctness is appropriate even for distributed-computing tasks in all applied contexts, let alone whether it can be adapted to broader task classes.
+
+  No study has systematically compared binary global-correctness against partial-credit metrics on identical coordination tasks, showing how metric choice affects interpretation of the same underlying agent behavior. This gap is a foundational problem that blocks meta-level claims about whether collapse is fundamental or task-dependent. The emerging evidence suggests metric choice itself is a source of variation in reported scaling behavior (Grötschla et al., 2025; Li et al., 2026), yet the field has not invested in metric-sensitivity analysis across task types.
+
+  The T2-metric thread is planted: whether binary global-correctness or partial-credit metrics best capture coordination success. This tension will not resolve until the field establishes consensus on what to measure—a consensus that does not yet exist. For now, the measurement problem stands as a fundamental source of uncertainty about whether collapse generalizes beyond the specific domains and metrics on which it has been observed.
+
+  ## Failure modes: where coordination breaks
+
+  The measurement problem established in the preceding section—whether binary global-correctness or partial-credit metrics best capture coordination success—sits in productive tension with an empirical reality: the field has identified three failure modes where coordination demonstrably breaks, regardless of which metric is applied. These represent the mechanistic ground where abstract claims about scaling collapse touch the operational reality of agent interactions.
+
+  Strategy divergence occurs when agents commit to incompatible or misaligned approaches before execution, preventing synchronized execution of the intended distributed-computing coordination task (Reid et al., 2025; Kim et al., 2025). In a leader-election task, this occurs when some agents commit to "elect the node with maximum ID" while others commit to "elect the first node that proposes itself"—both internally consistent strategies, but incompatible at execution. The coordination failure is not a computation error; it is a misalignment in what algorithm the agents collectively implement. The critical observation is that each agent can execute its chosen strategy correctly in isolation; the failure emerges only in composition. Strategy divergence appears as a failure mode in multiple independent sources, marking it as a robust phenomenon rather than a one-paper artifact (Reid et al., 2025; Kim et al., 2025).
+
+  Cascading errors occur when agents accept neighbor-supplied information without independent validation, allowing a single seed error to propagate down the dependency chain into system-wide failure (Reid et al., 2025; Kim et al., 2025). In consensus, if one agent computes an incorrect value and broadcasts it, and neighbors accept it without checking against their own local observations, that false value can cascade through the network and corrupt the consensus outcome. The mechanism is straightforward: information flows through directed dependencies, and any error at a source node contaminates all downstream nodes. Agents are not stupid—they are following a reasonable delegation strategy (trust neighbor information to reduce computation)—but the lack of validation mechanism makes the system fragile. This mode appears consistently across multiple sources, suggesting it is not contingent on a single team's implementation (Reid et al., 2025; Kim et al., 2025).
+
+  Silent errors represent a deeper failure mode: agents produce outputs that appear competent and internally consistent but are actually incorrect, and the agents lack metacognitive awareness of their own failure (Reid et al., 2025; Jiang et al., 2026). An agent might announce "I have colored my vertex red in a way consistent with all my neighbors' colors" when in fact the local graph has contradictions the agent has not detected. To an observer, the agent appears to have solved its subproblem; to the system, a false solution has been introduced that will corrupt downstream coordination. Silent errors are particularly dangerous because they do not trigger explicit error-detection mechanisms; they propagate as confident-seeming information that downstream agents incorporate without suspicion. The evidence for silent errors is emerging—not yet pervasive in the literature—but they represent a distinct failure mode from strategy divergence (misalignment in strategy choice) and cascading errors (information acceptance without validation). Silent errors concern internal incompetence masked by the appearance of internal competence.
+
+  Yet the failure-modes landscape is not uniformly dark. The field has observed that agents sometimes demonstrate collaborative ability to detect inconsistencies and assist in repair, indicating that coordination capability exists but is deployed unpredictably (Reid et al., 2025; Yao et al., 2026). The same agents that cascade errors silently in one problem sometimes catch and repair inconsistencies in another. This inconsistency raises a critical question: are these failure modes intrinsic to LLM agents—features that emerge inevitably from how LLMs reason and communicate—or are they contingent on prompt design, communication protocols, and task framing? If they are intrinsic, they set fundamental limits on scaling. If they are contingent, they are engineering problems solvable through design iteration. The field has not yet separated these cases, though the pathway forward is clear: ablation studies that systematically vary prompt instructions for strategy synchronization, neighbor-information validation, and metacognitive failure-detection would reveal which design choices create or prevent each failure mode.
+
+  Each failure mode can plausibly cascade to system-level collapse. Strategy divergence, if unresolved, fragments the agent team into subgroups executing incompatible algorithms. Cascading errors, if unchecked, transform isolated mistakes into network-wide corruption. Silent errors, if undetected, seed cascades while evading correction. The convergence of multiple independent sources on strategy divergence and cascading errors—C8 and C9—suggests these are robust failure modes rather than experimental artifacts. The emerging evidence on silent errors and inconsistent conflict resolution—C10 and C11—points toward a deeper mechanistic question: Do these failures trace to one root cause operating across all three modes, or do multiple independent mechanisms drive collapse at different scales and in different task domains?
+
+  ## Mechanistic hypotheses and the ablation gap
+
+  The three failure modes identified above—strategy divergence, cascading errors, and silent errors—could each trace to a single root cause or reflect independent mechanisms operating at different scales. The field has proposed three independent mechanistic hypotheses to answer this question, but none has been systematically tested against the others (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).
+
+  The first hypothesis is **context saturation**: scaling collapse results from agents exceeding their context windows as information accumulates, degrading reasoning quality on the remaining coordination problem. The evidence is partial and contested. Context-window capacity alone does not solve scaling; even with 200k+ token capacities available in frontier models, naive utilization creates information pollution that degrades coordination (Verma, 2026). An agent given access to 100 neighbors' messages may have technically sufficient tokens to process them all, but the flood of information buries the coordinating signal in noise. Dynamic attentional context scoping has been proposed as a remedy, where agents dynamically select which neighbor information to attend to, preserving a compact representation of critical state rather than accumulating unbounded information (Verma, 2026). This remedy remains untested against the communication and state-complexity hypotheses.
+
+  The second hypothesis is **communication-round boundedness**: scaling collapse results from insufficient rounds of inter-agent communication to achieve strategy coherence before action execution. In distributed algorithms, agents must exchange messages, update their local strategy based on neighbor responses, exchange again, and iterate until consensus emerges. If the number of communication rounds is fixed or bounded, then at large network sizes the propagation of information and strategy consensus may fail to complete before the global algorithm's next phase requires action. Unlike context saturation—a capacity problem—communication-round boundedness is a synchronization problem rooted in classical distributed computing theory. The hypothesis is theoretically plausible but empirically untested; no study has varied communication rounds while holding agent count and context window constant to isolate this factor.
+
+  The third hypothesis is **combinatorial state explosion**: scaling collapse results from exponential growth in the reachable state space as agent count increases, overwhelming the agent's ability to reason about global coordination. At four agents, an agent might enumerate the states of all neighbors; at 100 agents, the number of distinct global configurations grows exponentially, and the agent lacks computational capacity to reason forward through the coordination problem. This is a search-space problem mapping onto classical complexity theory—as the state space expands, reasoning becomes intractable.
+
+  The core problem is the absence of ablation studies isolating these hypotheses. An experiment varying context-window capacity while holding communication rounds and task structure constant would test context saturation against the other two. An experiment increasing allowed communication rounds while holding context window and network size constant would isolate communication-round boundedness. An experiment varying task complexity while holding rounds and context fixed would probe combinatorial state explosion. No single study has conducted these controlled variations on an identical benchmark. Each hypothesis instead receives isolated attention: SagaLLM addresses context saturation by preserving agent specifications and intermediate states with transaction guarantees, but lacks independent validation or comparison against alternatives (Zhang et al., 2025; Chang & Geng, 2025). Byzantine fault-tolerance concepts from distributed computing—gossip-based secure message propagation and norm-based comparative gradient elimination—have been adapted and tested on multi-agent LLM systems through pilot experiments comparing reliability under fault-tolerant versus traditional protocols (Reid et al., 2025; Zheng et al., 2025; Chadderwala, 2025; Gupta et al., 2020; Akoun & Meyer, 2022), offering redundancy mechanisms that could address cascading errors, yet this work is single-source without independent replication on shared benchmarks.
+
+  The field's most urgent open question sits unresolved in this gap: whether scaling model size, improving instruction-following, or using specialized reasoning tokens changes the collapse at 100 agents (Li et al., 2026; Kim et al., 2025). This question cuts across all three mechanistic hypotheses. A larger model with better instruction-following might mitigate combinatorial state explosion through more accurate global reasoning, exploit context more effectively, or achieve strategy coherence faster. Without this experiment, we cannot determine whether collapse is intrinsic to current LLM capability levels or whether improving agent reasoning removes it. The mechanistic hypothesis and ablation gap thus represents the binding constraint on progress. We have plausible mechanisms and promising partial remedies, but no experiment isolates which factor drives collapse. Until ablation studies systematically vary context capacity, communication rounds, and state-space complexity on controlled benchmarks, mechanistic inference remains speculative, and all architectural proposals remain untested against the causal ground they claim to address.
+
+  ## Does collapse generalize beyond distributed computing?
+
+  The collapse evidence is confined to distributed-computing coordination tasks with symmetric agent goals and complete-information requirements (Li et al., 2026; Reid et al., 2025; Grötschla et al., 2025). In graph coloring, each agent knows the constraint graph and its own vertex; in consensus, all agents can communicate with all others and reach agreement on a single value. These properties—symmetric goals, complete information, global-consistency requirements—are specific to this problem class and do not hold universally in coordination tasks.
+
+  Planning tasks with heterogeneous objectives (different agents with different delivery deadlines) are asymmetric. Negotiation tasks where agents have conflicting preferences (buyer wants low price, seller wants high price) have incomplete information about each other's true constraints. Collaborative reasoning where agents iteratively refine a shared understanding involve information that is revealed gradually, not given upfront. Does the 100-agent scaling collapse appear in these domains? The evidence is silent.
+
+  Broader scaling studies report substantial coordination degradation beyond moderate team sizes only up to nine agents across four agentic benchmarks (Li et al., 2026; Kim et al., 2025). This narrowness is the critical fact: nine agents is not 100; "substantial degradation" is not "collapse to near zero"; and these studies are not confined to distributed computing, so they may use different task structures, success metrics, or problem classes. The absence of replication or extension of AgentsNet's methodology to planning, negotiation, or reasoning tasks means we cannot compare scaling profiles across domains using a uniform measurement framework.
+
+  Whether collapse is a universal property of multi-agent LLM coordination or specific to symmetric, complete-information distributed-computing tasks directly affects interpretation of all mechanistic hypotheses. If collapse occurs across task types, mechanistic explanations invoking combinatorial state explosion or context saturation must apply universally. If collapse is task-specific, perhaps task structure or the binary global-correctness metric is doing most of the work, and different domains have different scaling limits.
+
+  The measurement problem [T2] contaminates any attempt to answer this question. If broader scaling studies use binary global-correctness metrics on planning tasks, they may show collapse at moderate scales that is actually an artifact of measuring "all agents' plans are optimal" (an inappropriately strict criterion for planning). If they use partial-credit metrics, they may show graceful degradation that would appear as collapse under AgentsNet's stricter standard. One planning benchmark might measure success as "percentage of subtasks completed correctly"; another might measure negotiation success as "percentage of agents' preferences satisfied." If these were re-evaluated under binary global-correctness—where a plan succeeding on 99 of 100 subtasks counts as failure—they might observe near-total collapse at 100 agents, or they might not. Without task-agnostic evaluation—holding the measurement framework constant while varying task structure and agent count—we cannot disentangle domain-specificity of collapse from measurement artifacts.
+
+  AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales (Grötschla et al., 2025; Li et al., 2026), and it covers only distributed computing. The field's evidence base for scaling collapse is therefore domain-narrow and measurement-narrow. A responsible answer to the generalizability question would require: (1) scaling studies of planning, negotiation, and reasoning tasks to at least 100 agents, using agent counts and task structures directly comparable to AgentsNet; (2) standardized metric definition that can be meaningfully applied across task types, resolving whether differences in reported performance reflect genuine differences in coordination quality or differences in metric choice; (3) explicit comparison of the same models and prompting strategies across distributed-computing and broader task types at identical agent counts. Until independent teams replicate AgentsNet on different task classes, or extend its quantitative framework to planning and negotiation with commensurable metrics, the claim that "scaling collapse is a universal barrier" remains a hypothesis. The alternative—that collapse is specific to distributed computing's symmetric, complete-information structure—is equally untested and cannot be falsified without the cross-domain evaluation the field has not conducted.
+
+  ## Architecture and topology: promising directions without replication
+
+  The evidence suggests that architectural design choices can improve coordination, but none has been validated across multiple independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+
+  Networks of LLM-based agents can outperform single agents on complex reasoning tasks through structured topologies and intention-propagation methods (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024). CoMM combines role-specialized experts (a moderator, a proposer, a critic) across multiple reasoning paths, and models action dependencies via a graph neural policy module that allows coordinated actions to emerge from communication rather than being hard-coded. The gains are real: structured topologies beat single-agent baselines. But the gains are bounded, and the authors concede the framework suffers from task-specific design requirements and acknowledged limitations (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024). The evidence demonstrates that structured topology can improve performance in contexts where task structure permits role specialization; it does not establish that role-specialized architectures scale to 100-agent distributed-computing coordination tasks, nor that they generalize across task classes.
+
+  Topological structure measurably affects multi-agent robustness (Mao et al., 2025). Across chain, cycle, tree, and complete-graph topologies, systems protected by defense mechanisms hold attack-success indices stable (35–50) as agent count rises, whereas unprotected systems degrade with scale (Mao et al., 2025). This finding is important because it shows that topology is not orthogonal to scale—different topologies have different degradation profiles. Yet the result is single-source, and the mechanisms underlying the robustness advantage are confined to adversarial settings. Whether the same topological principles apply to non-adversarial coordination tasks, or whether different tasks prefer different topologies, remains unexplored. The failure modes in distributed-computing coordination—strategy divergence, cascading error, silent error—may not transfer to or be mitigated by the defense mechanisms demonstrated in C20.
+
+  Decentralized architectures with dynamic task allocation provide functional alternatives to centralized orchestration, improving scalability and fault tolerance in tested settings (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025). Hierarchical extensions add cluster-based task routing that converges with probability 1 under bounded task complexity, finite agent capability, and connected graphs, with expected completion time O(log|A|·log|T|) and communication cost reduced from O(|A|²) toward O(|A|^1.5) (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025). Differential privacy extensions enable (ε,δ)-differentially-private knowledge sharing. These theoretical properties are impressive—provable convergence and communication efficiency—but they are derived on paper, not tested empirically across model families, and not compared against centralized or peer-to-peer alternatives on identical benchmarks. The convergence guarantees apply under idealized assumptions (bounded task complexity, connected graphs, probabilistic convergence); it remains unknown whether LLM agents implement the required message-passing protocols faithfully, or whether silent errors and cascading errors violate the theoretical assumptions.
+
+  Role-specialized networks, topological diversity, decentralized routing, and hierarchical clustering all point in the same direction: architectural design beyond the flat peer-to-peer topology matters. But the evidence for any particular architectural choice is thin. No architectural design choice has been validated across multiple independent teams, datasets, model families, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026). When one team proposes a role-specialized network (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024) and another proposes decentralized hierarchical routing (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025), the field has no shared evidentiary ground to determine which is more robust, which scales further, or which applies to which domains. Each innovation is validated on its own benchmark or dataset; when a new paper introduces a different architecture, it often introduces a different benchmark as well, making cross-architecture comparison impossible.
+
+  The arch-design thread is planted: architectural design choices lack cross-team validation, empirical comparison on shared benchmarks, and systematic ablation studies isolating which design components matter for which failure modes. This thread will connect to the final conclusion: we have promising directions that cannot yet be distinguished from research artifacts of the teams that proposed them.
+
+  ## The replication and ablation crisis
+
+  The field has produced many hypotheses and partial remedies but invested little in systematic falsification. This is the binding constraint preventing progress.
+
+  AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales, and it has not been replicated or extended by independent teams (Grötschla et al., 2025; Li et al., 2026; Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026). The absence of replication means we cannot know whether AgentsNet's scaling collapse signature is robust to variations in implementation details—model family, prompt template, graph sampling—or whether it is partially an artifact of the specific implementation AgentsNet chose. A replication with different models or prompting strategies would either confirm the collapse profile or reveal that prompt design, model choice, or other implementation details matter more than we believed. The replication study is not a luxury; it is a prerequisite for interpreting the original finding. Without it, the field rests its claims about coordination degradation on a single benchmark implementation.
+
+  No ablation studies have tested whether failure modes survive changes in prompting strategy, agent count, communication protocol, or task structure (Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026). Consider strategy divergence: Is it an inevitable consequence of multi-agent LLMs reasoning in parallel, or does it result from prompts that encourage agents to commit to strategies before consensus-building? An ablation study varying prompt templates across otherwise identical tasks would answer this. Consider cascading errors: Do they result from a single failure to validate information, or from the agent population's lack of shared trust mechanisms? An ablation adding validation checks would test this. Consider silent errors: Can they be prevented through instruction refinement, or are they a fundamental property of how LLMs reason under coordination pressure? Without such experiments, we cannot distinguish inherent LLM limitations from implementation artifacts.
+
+  The mechanistic hypotheses—context saturation, communication-round boundedness, combinatorial state explosion—have never been tested against each other (Verma, 2026; Zhang et al., 2025; Kim et al., 2025). An ablation study would isolate them: hold context window at 8k tokens and add communication rounds, testing if scaling collapse survives (rules out communication-round boundedness as the sole cause); hold communication rounds at 5 and increase context window to 200k, testing if scaling collapse survives (rules out context saturation as the sole cause); increase model size to the largest available and test if scaling collapse survives (tests combinatorial state explosion hypothesis). No such study exists. Moreover, when papers propose solutions—SagaLLM addressing context saturation, hierarchical routing addressing state explosion—the field cannot determine whether improvement proves the solution addresses its hypothesized mechanism or simply reflects any architectural change that adds structure and validation. Cross-solution comparison on identical benchmarks is absent.
+
+  Architectural improvements lack cross-team validation (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026). Role-specialized networks are tested on complex reasoning tasks, not on 100-agent distributed computing. Topological defenses are tested on attack robustness, not on coordination task performance. Decentralized task allocation is proposed theoretically with convergence properties, not validated empirically against centralized baselines on shared benchmarks. The architectural design thread cannot resolve because the empirical infrastructure for comparison is absent. Each paper proposes an innovation and demonstrates it works on the authors' tasks and model choices; no independent team has then reproduced the claim on the same benchmark or compared it against alternatives.
+
+  The field's most urgent open question—whether scaling model size, instruction-following, or specialized reasoning tokens changes the 100-agent scaling collapse—remains untested because no team has prioritized this ablation (Li et al., 2026; Kim et al., 2025). This gap is symptomatic. The question is concrete, answerable, and high-priority. Yet it has not been run. The reason is not technical impossibility but rather the field's lack of validation infrastructure and shared research coordination.
+
+  The replication and ablation crisis consolidates the problem-lattice into a single structural observation: we have defined the coordination problem at scale precisely enough to see what we do not know, but not rigorously enough in our research practices to answer it. The next phase requires abandoning isolated innovation in favor of systematic comparison and ablation as first-class research activities. This demands collaborative benchmarking and replication infrastructure that allows papers to build on each other's evidence rather than creating islands of validation.
+
+  ## Open questions and future directions
+
+  The lattice of unresolved problems maps onto a concrete research agenda organized around planted tensions, where certain investigations must precede others and progress on each depends on resolution of others.
+
+  **Isolating mechanistic causes (T1-impl).** The field must prioritize ablations testing context saturation, communication-round boundedness, and combinatorial state explosion against each other on AgentsNet or replica benchmarks (Verma, 2026; Zhang et al., 2025; Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026). Design a three-way factorial study varying context window, communication round count, and problem complexity while holding agent count constant. Test whether the 100-agent collapse persists across all three dimensions or disappears when any single factor is controlled. This resolves whether collapse is fundamental or implementation-dependent—a prerequisite for all downstream architectural claims. Concretely: systematically vary token-window capacity (4k, 8k, 32k, 128k, 200k tokens); vary communication rounds (1, 2, 3, 5, 10 synchronous rounds before action execution); and vary state-space cardinality (graph density, constraint count, problem size) while holding others constant. Measure success rate, agent accuracy on local constraints, and distributed-algorithm correctness. These ablations are engineering-intensive but straightforward; their absence represents a choice, not an obstacle. Simultaneously execute the field's most urgent open question (Li et al., 2026; Kim et al., 2025): does scaling model size, improving instruction-following, or using reasoning tokens alter the collapse at 100 agents? Evaluate GPT-4, GPT-4-turbo, o1, and larger models on AgentsNet at 4, 16, 100 agents using identical prompts and protocols. If larger models recover performance at 100 agents, the collapse is remediable by capability. If not, capability-dependent explanations become implausible, narrowing focus to structural factors like communication topology or state-space complexity.
+
+  **Establishing measurement consensus (T2-metric).** Metric consensus must precede task-agnostic evaluation and generalizability claims. Convene the field to define what coordination success means across task classes and establish agreement on how collapse is measured. Define success in domain-specific terms where appropriate: binary global-correctness for distributed-computing tasks (where exact global agreement is required), partial-credit metrics for planning (agents meet X% of individual constraints, problems solve Y% of global constraints), quality-of-agreement metrics for negotiation (solutions satisfy Z% of both agents' preferences). Compare binary global-correctness against partial-credit frameworks on identical benchmark suites; measure how the collapse signature changes under each metric. If collapse persists under all metrics, it is robust; if it disappears under partial-credit metrics, the problem may be metric-dependent rather than fundamental. Implement task-agnostic evaluation frameworks that hold success measurement constant across heterogeneous task types, allowing readers to compare results across domains and understand how metric choice affects reported collapse severity. This resolves whether broader scaling studies are reporting the same phenomenon as AgentsNet or different phenomena masked by different metrics.
+
+  **Extending generalizability beyond distributed computing.** With metric consensus established, scale coordination studies to planning (multi-agent resource allocation, delivery routing with heterogeneous deadlines), negotiation (agents with conflicting preferences reaching acceptable deals), and open-ended collaborative reasoning (iteratively refining shared models). Fund a consortium project—ideally multi-institution—to build and evaluate a suite of coordination benchmarks spanning all four task classes, measured under commensurable success criteria, at agent counts from 4 to 100+. Test whether the 100-agent collapse appears uniformly across planning, negotiation, and reasoning at identical scales with identical models and metrics, or whether it is distributed-computing-specific. Test whether architectural improvements that work for consensus also work for planning and negotiation. If scaling collapse is universal, mechanistic understanding becomes central to all coordination domains. If collapse is task-specific, mechanistic hypotheses must be rescoped. This answers whether collapse is a universal barrier or domain-specific artifact.
+
+  **Validating architectural proposals across independent teams.** Replicate C1 (role-specialized networks), C16 (decentralized and hierarchical routing), and C20 (topological defenses) using published protocols, independent teams, multiple model families, and shared benchmarks. Implement all three approaches on AgentsNet tasks at multiple scales (16, 32, 100 agents), using standardized metrics and prompts, allowing direct head-to-head comparison. Conduct ablations for each approach isolating which design components drive improvements independent of others. The field must require that any architectural claim validated on a scale-focused benchmark be independently replicated by at least one other team using the same task suite and success metrics. Only through such cross-team comparison can signal be separated from noise; architectural recommendations are unfounded without it.
+
+  **Detecting and preventing silent errors.** Develop metacognitive mechanisms for failure-awareness (Reid et al., 2025; Jiang et al., 2026). Test whether agents can be prompted to state confidence in each conclusion, to flag reasoning steps that seem uncertain, or to validate peer outputs against local knowledge before accepting them. Test multi-round validation protocols where agents verify neighbor outputs against their own observations; test explicit strategy-alignment phases where agents discuss and agree on the algorithm before execution. Measure whether these interventions reduce cascading errors (Reid et al., 2025; Kim et al., 2025) and silent errors (Reid et al., 2025; Jiang et al., 2026), or whether failure modes persist despite intervention. If preventable, measure the impact on scaling collapse through ablation: does coordination improve when silent-error detection is added? If failure modes persist despite metacognitive repair, they may be more fundamental to LLM-based coordination.
+
+  These investigations are not orthogonal choices but a connected dependency graph. Metric consensus must precede task-agnostic evaluation, because you cannot measure collapse across domains without agreeing what success means. Ablations isolating mechanistic causes must precede architectural claims of solving collapse, because "architecture X scales to 100 agents" is vacuous without knowing what collapse you are solving. Mechanistic isolation and task-agnostic evaluation together clarify whether collapse is fundamental or task-specific. Replication infrastructure must precede architectural validation; architectural proposals rest on isolated explorations and cannot sustain claims without cross-team verification on shared benchmarks. The field should not pursue these in parallel as competing projects but recognize their dependencies and sequence them deliberately. The immediate priority is metric consensus (fastest to achieve) and benchmark replication (necessary to ground all subsequent work). Progress on any single thread is contingent on progress on others. A research program that addresses these threads sequentially will close the explanation gap far more effectively than continued isolated innovation, converting speculation about scaling collapse into grounded understanding of its causes and scope.
+
+  ## Conclusion: The lattice unresolved
+
+  The field's central obstacle is not a lack of hypotheses or promising directions. The obstacle is the absence of ablation infrastructure and cross-team replication to arbitrate between them.
+
+  The 100-agent scaling collapse is empirically real in distributed-computing coordination tasks, where agent goals are symmetric and information is complete (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025). Whether the collapse is fundamental or implementation-dependent remains unresolved because no study isolates the mechanistic cause (Verma, 2026; Zhang et al., 2025; Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026). Three competing hypotheses—context saturation, communication-round boundedness, combinatorial state explosion—each have partial supporting evidence and no direct comparison (Verma, 2026; Zhang et al., 2025; Kim et al., 2025). Until ablations isolate which factor dominates, architectural improvements (C1, C16, C20) remain untested against the causal ground they claim to address. The field's most urgent open question—whether scaling model size, instruction-following improvements, or reasoning tokens reduce the collapse at 100 agents (Li et al., 2026; Kim et al., 2025)—remains unanswered.
+
+  Whether collapse generalizes beyond distributed computing is unknown (Li et al., 2026; Kim et al., 2025). The evidence base is narrow: only AgentsNet provides systematic scale-focused evaluation, confined to distributed-computing tasks with symmetric goals and complete information (Grötschla et al., 2025; Li et al., 2026). Broader scaling studies reach only nine agents across four benchmarks (Li et al., 2026; Kim et al., 2025), and they use different task types and metrics, making cross-study collapse comparison unreliable. Whether planning, negotiation, or collaborative reasoning show the same 100-agent collapse is untested. No task-agnostic evaluation has been conducted—applying the same success metrics to distributed-computing, planning, negotiation, and reasoning tasks at the same agent counts—that would determine whether scaling collapse is universal or domain-specific.
+
+  Whether binary global-correctness is the appropriate success metric is unresolved [C7, T2]. AgentsNet's strict criterion—counting only fully-correct global solutions—is defensible for hard-constraint distributed computing but may be inappropriately harsh for domains admitting partial credit (Grötschla et al., 2025; Li et al., 2026). Yet the field has not established consensus on measurement, and different studies use different metrics, contaminating generalizability claims. A metric-sensitivity analysis does not exist. Until metric choice is made explicit and compared systematically against partial-credit frameworks on identical benchmarks, we cannot know whether scaling degradation is universal or domain- and measurement-specific.
+
+  Failure modes are documented as phenomena but not isolated as contingent versus intrinsic (Reid et al., 2025; Kim et al., 2025; Jiang et al., 2026). Strategy divergence, cascading errors, and silent errors all appear in the literature, but no ablation study tests whether they survive changes in prompt design, communication protocol, or task structure. Agents sometimes demonstrate collaborative conflict resolution (Reid et al., 2025; Yao et al., 2026), suggesting the capability exists but is deployed inconsistently. This inconsistency raises the critical question: Are these failures features of LLM reasoning or bugs in coordination design? The field has not separated these cases.
+
+  Architectural improvements exist but lack systematic validation (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024; Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025; Mao et al., 2025). Role-specialized networks outperform single agents on complex reasoning. Topological structure affects robustness. Decentralized and hierarchical routing improve scalability in theory. Yet no architectural choice has been validated across multiple independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026). Each innovation is validated in isolation on its own benchmark. The field has no infrastructure for cross-architecture comparison at scale.
+
+  The fundamental problem-lattice sits unresolved at the intersection of these tensions: whether collapse is fundamental or implementation-dependent (T1-impl), what counts as coordination success (T2-metric), whether collapse generalizes beyond distributed computing, and whether architectural improvements scale and transfer across domains. These problems are not independent. A claim that "architecture X solves coordination at 100 agents" cannot be evaluated without first establishing what collapse means, whether it generalizes to the domain architecture X targets, and whether the mechanistic hypothesis underlying architecture X's design is actually causally relevant.
+
+  The field has reached the threshold of maturity where it can pose coordination-at-scale as a well-defined problem. The 100-agent collapse signature is documented (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025). The failure modes are characterized (Reid et al., 2025; Kim et al., 2025; Jiang et al., 2026). The mechanistic hypotheses are articulated (Verma, 2026; Zhang et al., 2025; Kim et al., 2025). Architectural proposals exist (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024; Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025; Mao et al., 2025). The next phase requires a transition from isolated innovation to systematic comparison. This transition demands shared benchmarks and replication infrastructure so that findings can be compared across teams and models. It requires ablation as a first-class research activity, prioritized equally with novel architecture or prompting strategies. It requires measurement consensus on what success means across task classes before claiming generalizability. It requires factorial design of scaling studies that vary agent count, model size, network topology, task structure, and prompting strategy in a structured way, isolating causes rather than confounding them.
+
+  The field is pre-paradigmatic in Thomas Kuhn's sense: we have enough shared understanding to know what we do not know, but not enough agreed-upon methodology to resolve it. The focal question—*What causes multi-agent LLM coordination to degrade with scale, and is the collapse fundamental or an artifact of how we measure and implement coordination?*—remains open. The answer depends not on more innovation, but on rigor: the willingness to falsify hypotheses rather than accumulate them, to replicate findings rather than extend them, to measure consistently rather than optimize locally. The lattice will resolve only when these research practices become conventions.
+
+  ## References
+
+  - Grötschla et al., 2025. AgentsNet: Coordination and Collaborative Reasoning in Multi-Agent LLMs. https://ar5iv.labs.arxiv.org/abs/2507.08616
+  - Chen et al., 2024. CoMM: Collaborative Multi-Agent, Multi-Reasoning-Path Prompting for Complex Problem Solving. https://ar5iv.labs.arxiv.org/abs/2404.17729
+  - Qiu et al., 2024. Towards Collaborative Intelligence: Propagating Intentions and Reasoning for Multi-Agent Coordination with Large Language Models. https://ar5iv.labs.arxiv.org/abs/2407.12532
+  - Li et al., 2026. Scaling Behavior of Single LLM-Driven Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2606.00655
+  - Reid et al., 2025. Risk Analysis Techniques for Governed LLM-based Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2508.05687
+  - Kim et al., 2025. Towards a Science of Scaling Agent Systems. https://ar5iv.labs.arxiv.org/abs/2512.08296
+  - Jiang et al., 2026. LSTM-MAS: A Long Short-Term Memory Inspired Multi-Agent System for Long-Context Understanding. https://ar5iv.labs.arxiv.org/abs/2601.11913
+  - Yao et al., 2026. HieraMAS: Optimizing Intra-Node LLM Mixtures and Inter-Node Topology for Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2602.20229
+  - Verma, 2026. Active Context Compression: Autonomous Memory Management in LLM Agents. https://ar5iv.labs.arxiv.org/abs/2601.07190
+  - Zhang et al., 2025. Network Topology and Information Efficiency of Multi-Agent Systems: Study based on MARL. https://ar5iv.labs.arxiv.org/abs/2510.07888
+  - Zheng et al., 2025. Rethinking the Reliability of Multi-agent System: A Perspective from Byzantine Fault Tolerance. https://ar5iv.labs.arxiv.org/abs/2511.10400
+  - Chadderwala, 2025. Byzantine Fault-Tolerant Multi-Agent System for Healthcare: A Gossip Protocol Approach to Secure Medical Message Propagation. https://ar5iv.labs.arxiv.org/abs/2512.17913
+  - Gupta et al., 2020. Byzantine Fault-Tolerant Distributed Machine Learning Using Stochastic Gradient Descent (SGD) and Norm-Based Comparative Gradient Elimination (CGE). https://ar5iv.labs.arxiv.org/abs/2008.04699
+  - Akoun & Meyer, 2022. SignSGD: Fault-Tolerance to Blind and Byzantine Adversaries. https://ar5iv.labs.arxiv.org/abs/2202.02085
+  - Zhang et al., 2025. D3MAS: Decompose, Deduce, and Distribute for Enhanced Knowledge Sharing in Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2510.10585
+  - Chang & Geng, 2025. SagaLLM: Context Management, Validation, and Transaction Guarantees for Multi-Agent LLM Planning. https://ar5iv.labs.arxiv.org/abs/2503.11951
+  - Renney et al., 2026. LLM-Enabled Multi-Agent Systems: Empirical Evaluation and Insights into Emerging Design Patterns & Paradigms. https://ar5iv.labs.arxiv.org/abs/2601.03328
+  - Yang et al., 2025. AgentNet: Decentralized Evolutionary Coordination for LLM-based Multi-Agent Systems. https://ar5iv.labs.arxiv.org/abs/2504.00587
+  - Nalagatla, 2025. Hierarchical Decentralized Multi-Agent Coordination with Privacy-Preserving Knowledge Sharing: Extending AgentNet for Scalable Autonomous Systems. https://ar5iv.labs.arxiv.org/abs/2512.00614
+  - Li et al., 2025. MAAD: Automate Software Architecture Design through Knowledge-Driven Multi-Agent Collaboration. https://ar5iv.labs.arxiv.org/abs/2507.21382
+  - Luo & Shao, 2026. Cayley Graph Optimization for Scalable Multi-Agent Communication Topologies. https://ar5iv.labs.arxiv.org/abs/2604.09703
+  - Wei et al., 2026. Agentic Reasoning for Large Language Models. https://ar5iv.labs.arxiv.org/abs/2601.12538
+  - Mao et al., 2025. AgentSafe: Safeguarding Large Language Model-based Multi-agent Systems via Hierarchical Data Management. https://ar5iv.labs.arxiv.org/abs/2503.04392
+narrative_statements:
+- text: 'Five fundamental distributed-computing coordination tasks—graph coloring, consensus, vertex cover, leader election, and maximal matching—all show the same collapse signature: performance approaching zero at 100 agents (Grötschla et al., 2025; Li et al., 2026).'
+  claim_refs:
+  - C2
+  expert_refs: []
+- text: 'Multiple mechanistic hypotheses exist: agents may exceed their context windows as information accumulates (Verma, 2026; Zhang et al., 2025; Kim et al., 2025); inter-agent communication may terminate before strategy coherence emerges (Verma, 2026; Zhang et al., 2025; Kim et al., 2025); the reachable state space may grow exponentially, overwhelming reasoning capacity (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).'
+  claim_refs:
+  - C12
+  - C13
+  - C12
+  - C12
+  expert_refs: []
+- text: 'Architectural remedies are also proposed: role-specialized expert networks outperform single agents on complex reasoning through structured topologies and coordinated reasoning paths (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024); decentralized task allocation with hierarchical routing improves scalability over centralized orchestration (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025); topological structure measurably affects robustness (Mao et al., 2025).'
+  claim_refs:
+  - C1
+  - C16
+  - C20
+  expert_refs: []
+- text: The problem is that none of these hypotheses has been tested against the others, and none of the architectural improvements has been validated across independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: No ablation study isolates whether the collapse survives changes in prompting strategy, agent count, communication protocol, or task structure (Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026).
+  claim_refs:
+  - C18
+  expert_refs: []
+- text: The field's most urgent open question—whether scaling model size, improving instruction-following, or using specialized reasoning tokens alters the collapse at 100 agents—remains untested (Li et al., 2026; Kim et al., 2025).
+  claim_refs:
+  - C19
+  expert_refs: []
+- text: The collapse is currently measured by counting only fully-correct global solutions; any partial success counts as failure (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: 'Third: Does scaling degradation generalize beyond distributed-computing tasks to planning, negotiation, and open-ended collaboration (Li et al., 2026; Kim et al., 2025)?'
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: The collapse evidence is confined to symmetric distributed-computing tasks with complete-information requirements (Li et al., 2026; Reid et al., 2025; Grötschla et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: Multiple approaches show promise in isolation; none has been validated by independent teams across multiple model families or shared benchmarks (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: AgentsNet establishes this by evaluating LLM agents on five fundamental problems—graph coloring, consensus, vertex cover, leader election, and maximal matching—across multiple network topologies (small-world, scale-free, Delaunay) and sizes (4, 8, 16 agents, with at least one repeat per configuration), measuring performance collapse to near zero at 100 agents (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025).
+  claim_refs:
+  - C2
+  - C4
+  - C6
+  expert_refs: []
+- text: Even on 4-node graphs, no LLM model performs consistently across all coordination task types within a single benchmark (Grötschla et al., 2025).
+  claim_refs:
+  - C3
+  expert_refs: []
+- text: AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales plus a quantitative framework relating model capability, network size, topology, and task complexity (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: Broader scaling studies report substantial coordination degradation beyond moderate team sizes only up to nine agents across four agentic benchmarks (Li et al., 2026; Kim et al., 2025), far below the 100-agent scale where distributed-computing tasks collapse entirely.
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: Yet for planning or negotiation tasks admitting partial satisfaction or graceful degradation, the same binary metric may distort what "coordination success" means (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: The field has no agreed-upon metric for multi-agent coordination success (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: AgentsNet's binary global-correctness criterion—counting only fully correct global solutions where all agents simultaneously satisfy their constraints, treating any partial success as failure—may be inappropriately harsh for domains admitting partial credit (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: The emerging evidence suggests metric choice itself is a source of variation in reported scaling behavior (Grötschla et al., 2025; Li et al., 2026), yet the field has not invested in metric-sensitivity analysis across task types.
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: Strategy divergence occurs when agents commit to incompatible or misaligned approaches before execution, preventing synchronized execution of the intended distributed-computing coordination task (Reid et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C8
+  expert_refs: []
+- text: Strategy divergence appears as a failure mode in multiple independent sources, marking it as a robust phenomenon rather than a one-paper artifact (Reid et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C8
+  expert_refs: []
+- text: Cascading errors occur when agents accept neighbor-supplied information without independent validation, allowing a single seed error to propagate down the dependency chain into system-wide failure (Reid et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C9
+  expert_refs: []
+- text: This mode appears consistently across multiple sources, suggesting it is not contingent on a single team's implementation (Reid et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C9
+  expert_refs: []
+- text: 'Silent errors represent a deeper failure mode: agents produce outputs that appear competent and internally consistent but are actually incorrect, and the agents lack metacognitive awareness of their own failure (Reid et al., 2025; Jiang et al., 2026).'
+  claim_refs:
+  - C10
+  expert_refs: []
+- text: The field has observed that agents sometimes demonstrate collaborative ability to detect inconsistencies and assist in repair, indicating that coordination capability exists but is deployed unpredictably (Reid et al., 2025; Yao et al., 2026).
+  claim_refs:
+  - C11
+  expert_refs: []
+- text: The field has proposed three independent mechanistic hypotheses to answer this question, but none has been systematically tested against the others (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: Context-window capacity alone does not solve scaling; even with 200k+ token capacities available in frontier models, naive utilization creates information pollution that degrades coordination (Verma, 2026).
+  claim_refs:
+  - C13
+  expert_refs: []
+- text: Dynamic attentional context scoping has been proposed as a remedy, where agents dynamically select which neighbor information to attend to, preserving a compact representation of critical state rather than accumulating unbounded information (Verma, 2026).
+  claim_refs:
+  - C13
+  expert_refs: []
+- text: 'Each hypothesis instead receives isolated attention: SagaLLM addresses context saturation by preserving agent specifications and intermediate states with transaction guarantees, but lacks independent validation or comparison against alternatives (Zhang et al., 2025; Chang & Geng, 2025).'
+  claim_refs:
+  - C15
+  expert_refs: []
+- text: Byzantine fault-tolerance concepts from distributed computing—gossip-based secure message propagation and norm-based comparative gradient elimination—have been adapted and tested on multi-agent LLM systems through pilot experiments comparing reliability under fault-tolerant versus traditional protocols (Reid et al., 2025; Zheng et al., 2025; Chadderwala, 2025; Gupta et al., 2020; Akoun & Meyer, 2022), offering redundancy mechanisms that could address cascading errors, yet this work is single-source without independent replication on shared benchmarks.
+  claim_refs:
+  - C14
+  expert_refs: []
+- text: 'The field''s most urgent open question sits unresolved in this gap: whether scaling model size, improving instruction-following, or using specialized reasoning tokens changes the collapse at 100 agents (Li et al., 2026; Kim et al., 2025).'
+  claim_refs:
+  - C19
+  expert_refs: []
+- text: The collapse evidence is confined to distributed-computing coordination tasks with symmetric agent goals and complete-information requirements (Li et al., 2026; Reid et al., 2025; Grötschla et al., 2025).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: Broader scaling studies report substantial coordination degradation beyond moderate team sizes only up to nine agents across four agentic benchmarks (Li et al., 2026; Kim et al., 2025).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales (Grötschla et al., 2025; Li et al., 2026), and it covers only distributed computing.
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: |-
+    ## Architecture and topology: promising directions without replication
+
+    The evidence suggests that architectural design choices can improve coordination, but none has been validated across multiple independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: Networks of LLM-based agents can outperform single agents on complex reasoning tasks through structured topologies and intention-propagation methods (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024).
+  claim_refs:
+  - C1
+  expert_refs: []
+- text: But the gains are bounded, and the authors concede the framework suffers from task-specific design requirements and acknowledged limitations (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024).
+  claim_refs:
+  - C1
+  expert_refs: []
+- text: Topological structure measurably affects multi-agent robustness (Mao et al., 2025).
+  claim_refs:
+  - C20
+  expert_refs: []
+- text: Across chain, cycle, tree, and complete-graph topologies, systems protected by defense mechanisms hold attack-success indices stable (35–50) as agent count rises, whereas unprotected systems degrade with scale (Mao et al., 2025).
+  claim_refs:
+  - C20
+  expert_refs: []
+- text: Decentralized architectures with dynamic task allocation provide functional alternatives to centralized orchestration, improving scalability and fault tolerance in tested settings (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025).
+  claim_refs:
+  - C16
+  expert_refs: []
+- text: 5) (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025).
+  claim_refs:
+  - C16
+  expert_refs: []
+- text: No architectural design choice has been validated across multiple independent teams, datasets, model families, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: When one team proposes a role-specialized network (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024) and another proposes decentralized hierarchical routing (Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025), the field has no shared evidentiary ground to determine which is more robust, which scales further, or which applies to which domains.
+  claim_refs:
+  - C1
+  - C16
+  expert_refs: []
+- text: AgentsNet is the only coordination-focused benchmark supplying systematic evaluation at multiple scales, and it has not been replicated or extended by independent teams (Grötschla et al., 2025; Li et al., 2026; Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C6
+  - C17
+  expert_refs: []
+- text: No ablation studies have tested whether failure modes survive changes in prompting strategy, agent count, communication protocol, or task structure (Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026).
+  claim_refs:
+  - C18
+  expert_refs: []
+- text: The mechanistic hypotheses—context saturation, communication-round boundedness, combinatorial state explosion—have never been tested against each other (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: Architectural improvements lack cross-team validation (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: The field's most urgent open question—whether scaling model size, instruction-following, or specialized reasoning tokens changes the 100-agent scaling collapse—remains untested because no team has prioritized this ablation (Li et al., 2026; Kim et al., 2025).
+  claim_refs:
+  - C19
+  expert_refs: []
+- text: '** The field must prioritize ablations testing context saturation, communication-round boundedness, and combinatorial state explosion against each other on AgentsNet or replica benchmarks (Verma, 2026; Zhang et al., 2025; Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026).'
+  claim_refs:
+  - C12
+  - C18
+  expert_refs: []
+- text: 'Simultaneously execute the field''s most urgent open question (Li et al., 2026; Kim et al., 2025): does scaling model size, improving instruction-following, or using reasoning tokens alter the collapse at 100 agents?'
+  claim_refs:
+  - C19
+  expert_refs: []
+- text: '** Develop metacognitive mechanisms for failure-awareness (Reid et al., 2025; Jiang et al., 2026).'
+  claim_refs:
+  - C10
+  expert_refs: []
+- text: Measure whether these interventions reduce cascading errors (Reid et al., 2025; Kim et al., 2025) and silent errors (Reid et al., 2025; Jiang et al., 2026), or whether failure modes persist despite intervention.
+  claim_refs:
+  - C9
+  - C10
+  expert_refs: []
+- text: The 100-agent scaling collapse is empirically real in distributed-computing coordination tasks, where agent goals are symmetric and information is complete (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025).
+  claim_refs:
+  - C2
+  - C4
+  expert_refs: []
+- text: Whether the collapse is fundamental or implementation-dependent remains unresolved because no study isolates the mechanistic cause (Verma, 2026; Zhang et al., 2025; Kim et al., 2025; Reid et al., 2025; Jiang et al., 2026).
+  claim_refs:
+  - C12
+  - C18
+  expert_refs: []
+- text: Three competing hypotheses—context saturation, communication-round boundedness, combinatorial state explosion—each have partial supporting evidence and no direct comparison (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: The field's most urgent open question—whether scaling model size, instruction-following improvements, or reasoning tokens reduce the collapse at 100 agents (Li et al., 2026; Kim et al., 2025)—remains unanswered.
+  claim_refs:
+  - C19
+  expert_refs: []
+- text: Whether collapse generalizes beyond distributed computing is unknown (Li et al., 2026; Kim et al., 2025).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: 'The evidence base is narrow: only AgentsNet provides systematic scale-focused evaluation, confined to distributed-computing tasks with symmetric goals and complete information (Grötschla et al., 2025; Li et al., 2026).'
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: Broader scaling studies reach only nine agents across four benchmarks (Li et al., 2026; Kim et al., 2025), and they use different task types and metrics, making cross-study collapse comparison unreliable.
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: Whether binary global-correctness is the appropriate success metric is unresolved [C7, T2].
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: AgentsNet's strict criterion—counting only fully-correct global solutions—is defensible for hard-constraint distributed computing but may be inappropriately harsh for domains admitting partial credit (Grötschla et al., 2025; Li et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: Failure modes are documented as phenomena but not isolated as contingent versus intrinsic (Reid et al., 2025; Kim et al., 2025; Jiang et al., 2026).
+  claim_refs:
+  - C8
+  - C9
+  - C10
+  expert_refs: []
+- text: Agents sometimes demonstrate collaborative conflict resolution (Reid et al., 2025; Yao et al., 2026), suggesting the capability exists but is deployed inconsistently.
+  claim_refs:
+  - C11
+  expert_refs: []
+- text: Architectural improvements exist but lack systematic validation (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024; Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025; Mao et al., 2025).
+  claim_refs:
+  - C1
+  - C16
+  - C20
+  expert_refs: []
+- text: Yet no architectural choice has been validated across multiple independent teams, datasets, or task classes (Renney et al., 2026; Li et al., 2025; Luo & Shao, 2026; Wei et al., 2026).
+  claim_refs:
+  - C17
+  expert_refs: []
+- text: The 100-agent collapse signature is documented (Grötschla et al., 2025; Li et al., 2026; Reid et al., 2025).
+  claim_refs:
+  - C2
+  - C4
+  expert_refs: []
+- text: The failure modes are characterized (Reid et al., 2025; Kim et al., 2025; Jiang et al., 2026).
+  claim_refs:
+  - C8
+  - C9
+  - C10
+  expert_refs: []
+- text: The mechanistic hypotheses are articulated (Verma, 2026; Zhang et al., 2025; Kim et al., 2025).
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: Architectural proposals exist (Grötschla et al., 2025; Chen et al., 2024; Qiu et al., 2024; Kim et al., 2025; Renney et al., 2026; Yang et al., 2025; Nalagatla, 2025; Mao et al., 2025).
+  claim_refs:
+  - C1
+  - C16
+  - C20
+  expert_refs: []
+gaps:
+- description: No controlled ablation has varied prompting, agent count, protocol, or task structure to determine whether the 100-agent collapse is fundamental or implementation-dependent; the methods exist but the studies have not been run.
+  gap_type: empirical
+- description: 'The field lacks an agreed coordination-success metric: AgentsNet''s strict binary criterion is the only systematic standard, and no partial-credit instrument has been validated across task classes.'
+  gap_type: methodological
+- description: Byzantine fault-tolerance, gossip, trust-based consensus, hierarchical routing, and SagaLLM-style context preservation have never been compared on identical coordination benchmarks against the scaling collapse.
+  gap_type: empirical
+- description: No framework predicts when adding agents yields beneficial emergent specialization versus when communication overhead and coordination noise dominate.
+  gap_type: theoretical

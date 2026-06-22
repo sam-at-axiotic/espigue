@@ -1,0 +1,46 @@
+# Packages the `espigue` Rust binary as a pip-installable wheel.
+#
+# maturin `bindings = "bin"` builds the crate's binary target and wraps it in a
+# wheel, so `pip install espigue` drops an `espigue` executable on PATH — no
+# Python runtime is used at run time, the wheel just ships the compiled binary.
+#
+#   pip install maturin
+#   maturin build --release          # wheel in target/wheels/
+#   pip install target/wheels/espigue-*.whl
+#   espigue --help
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "espigue"
+# Static (not read from Cargo.toml) because the workspace version is
+# "0.1.0-dev", which is not a valid PEP 440 release. Bump here on release.
+version = "0.1.0"
+description = "Topic in, cited literature review out — a standalone OpenRouter-backed synthesis CLI."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [{ name = "Axiotic" }]
+keywords = ["literature-review", "research", "llm", "openrouter", "arxiv", "rag", "synthesis"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing :: General",
+    "Environment :: Console",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+Repository = "https://github.com/sam-at-axiotic/espigue"
+
+[tool.maturin]
+# Build the binary target (`espigue`) rather than a Python extension module.
+bindings = "bin"
+manifest-path = "Cargo.toml"
+# Smaller wheels: strip debug symbols from the release binary.
+strip = true

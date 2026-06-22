@@ -1,0 +1,24 @@
+[package]
+name = "base"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Shared types, error taxonomy, and trait definitions for the Alzina runtime"
+
+[features]
+# Enables test-only helpers (e.g. ScopedEnvelope::bare) in non-test builds
+# such as integration test binaries that cannot use `#[cfg(test)]`.
+# Never enable in production code.
+test-harness = []
+
+[dependencies]
+uuid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
