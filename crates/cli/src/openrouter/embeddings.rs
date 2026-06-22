@@ -106,8 +106,8 @@ impl OpenRouterEmbeddingService {
                 .client
                 .post(&url)
                 .bearer_auth(&self.api_key)
-                .header("HTTP-Referer", "https://github.com/axiotic/litreview")
-                .header("X-Title", "litreview")
+                .header("HTTP-Referer", "https://github.com/axiotic/gna")
+                .header("X-Title", "gna")
                 .json(&body)
                 .send()
                 .await

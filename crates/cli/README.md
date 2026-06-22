@@ -1,8 +1,8 @@
-# litreview
+# gna
 
 Topic in, cited literature review out.
 
-`litreview` is a standalone command-line tool that turns a research question into
+`gna` is a standalone command-line tool that turns a research question into
 a structured, citation-grounded literature review. It searches arXiv and Semantic
 Scholar (and your own documents), grounds every claim in retrieved sources, and
 synthesises a review that surfaces the *tensions* in a field rather than a flat
@@ -41,7 +41,7 @@ trustworthy](#why-the-output-is-trustworthy)).
 Five more complete, unedited reviews — a small knowledge base on multi-agent LLM
 systems — are in [`examples/reviews/`](../../examples/reviews/).
 
-litreview has been evaluated end-to-end with **Haiku driving the expert draft
+gna has been evaluated end-to-end with **Haiku driving the expert draft
 swarm and a single Opus 4.8 call to merge**. The surprising result is how much of
 this quality holds when the bulk of the reasoning runs on Haiku, with just one
 stronger-model call to fuse the drafts. The shipped default uses
@@ -51,12 +51,12 @@ reproduce the tested setup.
 ## Quickstart
 
 ```bash
-pip install litreview
+pip install gna
 
 export OPENROUTER_API_KEY=sk-or-...          # required
 export S2_API_KEY=...                        # optional — adds the Semantic Scholar lane
 
-litreview "test-time compute scaling for language models"
+gna "test-time compute scaling for language models"
 #   → synthesis.yaml   (the structured review + bibliography)
 #   → graph.md         (the claim/tension graph)
 ```
@@ -67,9 +67,9 @@ runs on arXiv plus any local documents you ingest.
 ### Bring your own corpus
 
 ```bash
-litreview ingest ./papers/                   # index local .txt / .md / .pdf
-litreview --scope corpus-only "my question"  # cite only your documents
-litreview --scope corpus+web  "my question"  # your documents + arXiv/S2 (default)
+gna ingest ./papers/                   # index local .txt / .md / .pdf
+gna --scope corpus-only "my question"  # cite only your documents
+gna --scope corpus+web  "my question"  # your documents + arXiv/S2 (default)
 ```
 
 PDF ingest needs `pdftotext` (poppler): `brew install poppler` /
@@ -78,7 +78,7 @@ PDF ingest needs `pdftotext` (poppler): `brew install poppler` /
 ### Seed the review with specific papers
 
 ```bash
-litreview --seed-papers 2310.06825,1706.03762 "attention and efficient LLMs"
+gna --seed-papers 2310.06825,1706.03762 "attention and efficient LLMs"
 ```
 
 Seeds accept arXiv ids, DOIs, or Semantic Scholar ids. The panel is built directly
@@ -192,7 +192,7 @@ their full `synthesis.yaml` alongside the rendered review.
 
 ## A growing corpus you own
 
-litreview keeps a persistent local store (`litreview.db`). Every paper it
+gna keeps a persistent local store (`gna.db`). Every paper it
 retrieves and reads — abstract, full text where available, chunks, embeddings, and
 bibliography — is written there and reused on the next run. Documents you `ingest`
 join the same store. Over time it becomes a queryable memory of a field that lives
@@ -206,7 +206,7 @@ direction we are pointed at, not a feature that ships today.
 
 ## Related project
 
-litreview is a sibling of **[Symphonia][symphonia]**, an LLM-assisted
+gna is a sibling of **[Symphonia][symphonia]**, an LLM-assisted
 expert-consensus platform, and shares its synthesis engine with the
 [`axiotic-ai/consensus`][consensus] project — the original Python implementation
 of the test-time-diffusion consensus method that this Rust engine was ported from.
@@ -228,7 +228,7 @@ converge on a verified synthesis rather than a single confident summary.
 | `--no-rerank` | off | Keep pure RRF order (skip the cross-encoder) |
 | `--top-k` | engine default | Sources retrieved per lane |
 | `--out` | `.` | Output directory for `synthesis.yaml` + `graph.md` |
-| `--db` | `litreview.db` | Corpus database path |
+| `--db` | `gna.db` | Corpus database path |
 
 All models are OpenRouter slugs. Embeddings default to
 `openai/text-embedding-3-small` (1536 dims); reranking to a Cohere model. Override

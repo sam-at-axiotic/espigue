@@ -79,8 +79,8 @@ impl OpenRouterExecutor {
             .post(&url)
             .bearer_auth(&self.api_key)
             // OpenRouter attribution headers (optional but recommended).
-            .header("HTTP-Referer", "https://github.com/axiotic/litreview")
-            .header("X-Title", "litreview")
+            .header("HTTP-Referer", "https://github.com/axiotic/gna")
+            .header("X-Title", "gna")
             .json(&body)
             .send()
             .await

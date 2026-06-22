@@ -1,6 +1,6 @@
 # Example reviews
 
-Five real, unedited litreview outputs. Each was generated from a single research
+Five real, unedited gna outputs. Each was generated from a single research
 question with the `v3/lit-review-long` profile — no hand-editing. They are a
 knowledge base on multi-agent LLM systems, each review built around the *tensions*
 in its corner of the field with per-claim author-year citations and a full
@@ -14,7 +14,7 @@ Each review ships in two forms: the rendered prose (`.md`) and the full
 structured output (`.synthesis.yaml`) — the same review as machine-readable data,
 with every claim graded and quoted and the field's agreements, disagreements,
 uncertainties, and open gaps as first-class lists. See [The structured
-output](../../crates/litreview-cli/README.md#the-structured-output) for the full
+output](../../crates/cli/README.md#the-structured-output) for the full
 schema.
 
 | Review | Structured | Sources | Claims | Papers | Words |
@@ -27,10 +27,10 @@ schema.
 
 Every citation and quote in these files was mechanically verified against the
 retrieved source text at generation time — see [Why the output is
-trustworthy](../../crates/litreview-cli/README.md#why-the-output-is-trustworthy).
+trustworthy](../../crates/cli/README.md#why-the-output-is-trustworthy).
 
 To generate your own:
 
 ```bash
-litreview "shared memory and state management in multi-agent LLM systems"
+gna "shared memory and state management in multi-agent LLM systems"
 ```

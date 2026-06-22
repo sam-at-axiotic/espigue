@@ -14,7 +14,7 @@
 //! acceptable only at FFI/bridge boundaries. New types should prefer
 //! `DateTime<Utc>` internally and serialise as ISO-8601 strings.
 
-// Standalone literature-synthesis slice: only the modules the litreview build
+// Standalone literature-synthesis slice: only the modules the gna build
 // reaches. The runtime/governance/memory modules (audit, bootstrap, channel,
 // composition, config, display, domain_registry, engagement, hooks,
 // learnings_parser, memory_types, message, quality, session, templates, tiers,

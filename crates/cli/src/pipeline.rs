@@ -1559,7 +1559,7 @@ pub async fn run_review(
     let config = EngineConfig::new(
         TTD_AGENT_ID,
         model,
-        format!("litreview-{run_prefix}"),
+        format!("gna-{run_prefix}"),
         "r1",
         &question_id,
     )

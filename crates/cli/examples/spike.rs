@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
     let bib: Arc<dyn BibliographyStore> = Arc::new(NoopBibliographyStore);
 
     let config = EngineConfig::new(
-        "litreview-spike",
+        "gna-spike",
         "google/gemini-2.5-flash",
         "study-spike",
         "round-1",

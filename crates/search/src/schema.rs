@@ -262,7 +262,7 @@ pub async fn migrate(pool: &SqlitePool) -> AlzinaResult<()> {
 pub async fn in_memory_pool_with_search_schema() -> AlzinaResult<sqlx::SqlitePool> {
     // alzina-memory is not vendored here. Build the base pool inline:
     // register sqlite-vec BEFORE opening the connection (mirrors the daemon /
-    // litreview ordering fix), then create the one `schema_version` table that
+    // gna ordering fix), then create the one `schema_version` table that
     // `crate::schema::migrate` requires from Phase 1.
     let pool = {
         use std::str::FromStr;
