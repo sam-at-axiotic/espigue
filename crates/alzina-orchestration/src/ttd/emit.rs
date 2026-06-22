@@ -432,7 +432,7 @@ mod tests {
     /// Test uses a single TtdMachine<String> (narrative stage) for simplicity.
     #[tokio::test]
     async fn all_drafts_produce_spawn_completed() {
-        use crate::adapter::{ExpertResponse, ResponseProvenance, SourceId};
+        use crate::adapter::ExpertResponse;
         use crate::ttd::artifact::{Claim, SynthesisArtifact};
         use crate::ttd::stages::narrative::{
             NarrativeCritique, NarrativeDraftGen, NarrativeEvalFitness,
@@ -525,7 +525,7 @@ mod tests {
         use crate::ttd::retrieval::NoopRetriever;
         use crate::ttd::{TtdConfig, TtdMachine};
 
-        let (executor, count, log) = RecordingExecutor::new();
+        let (executor, _count, log) = RecordingExecutor::new();
         let executor: Arc<dyn crate::executor::AgentExecutor> = Arc::new(executor);
 
         let mut synthesis = SynthesisArtifact::new(

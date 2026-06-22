@@ -97,7 +97,7 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
         &self,
         inputs: &[ExpertResponse],
         executor: &Arc<dyn AgentExecutor>,
-        config: &TtdConfig,
+        _config: &TtdConfig,
         persona_prompt: Option<&str>,
         sampling: Option<crate::executor::SamplingParams>,
     ) -> Result<SynthesisArtifact, TtdError> {
@@ -420,7 +420,7 @@ impl GapResolve<SynthesisArtifact> for SynthesisGapResolve {
         gaps: &[IdentifiedGap],
         retrieved: &[RetrievedContext],
         executor: &Arc<dyn AgentExecutor>,
-        config: &TtdConfig,
+        _config: &TtdConfig,
     ) -> Result<SynthesisArtifact, TtdError> {
         use crate::ttd::prompts::synthesis::{
             render_synthesis_gap_resolve, render_synthesis_gap_resolve_patch,
@@ -438,7 +438,7 @@ impl GapResolve<SynthesisArtifact> for SynthesisGapResolve {
                 // Only build ExpertResponse from retrieved context when provenance is available.
                 // Fall back: skip items without a valid source_id for the v2 render path.
                 crate::adapter::SourceId::try_new(r.source_id.clone()).ok().map(|sid| {
-                    use crate::adapter::{ResponseProvenance, SourceId as SId};
+                    use crate::adapter::ResponseProvenance;
                     crate::adapter::ExpertResponse {
                         expert_id: sid.clone(),
                         prose: r.content.clone(),
@@ -1208,7 +1208,6 @@ pub(crate) fn parse_synthesis_xml(
                     "gap" if in_gaps => {
                         in_gap = true;
                         gap_text.clear();
-                        in_gap_text = false;
                         // Read gap_type from the `type` attribute.
                         gap_type = None;
                         for attr in e.attributes().flatten() {
@@ -1682,7 +1681,6 @@ pub(crate) fn apply_synthesis_patch(
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
 
@@ -1692,7 +1690,6 @@ mod tests {
     use crate::ttd::artifact::{ArgumentationGraph, GraphNode};
     use crate::ttd::config::TtdConfig;
     use crate::ttd::fitness::FitnessEval;
-    use crate::ttd::mod_types::TtdError;
     use crate::ttd::stages::RetrievedContext;
     use crate::ttd::state::IdentifiedGap;
 

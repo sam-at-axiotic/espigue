@@ -1233,13 +1233,11 @@ fn compute_minority_reports(
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use async_trait::async_trait;
 
     use crate::adapter::{ExpertResponse, ResponseProvenance, SourceId};
     use crate::ttd::artifact::{Claim, ClaimQuote, SynthesisArtifact};
-    use crate::ttd::mod_types::TtdError;
 
     // ── Mock executor ─────────────────────────────────────────────────────────
 

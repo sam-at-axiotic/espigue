@@ -30,18 +30,15 @@ use tokio::task::JoinSet;
 use alzina_search::bib_store::BibEntry;
 
 use crate::adapter::ExpertResponse;
-use crate::executor::AgentExecutor;
 use crate::ttd::fitness::{is_valid_graph, sort_candidates_best_first, weighted_sum, FitnessEval};
 use crate::ttd::guards::{budget_after_step_guard, budget_before_fitness_guard, wall_clock_guard, GuardOutcome};
 use crate::ttd::mod_types::TtdError;
 use crate::ttd::personas::{PERSONAS, V2_PERSONAS};
-use crate::ttd::retrieval::Retriever;
 use crate::ttd::sampling::build_sampling_configs;
-use crate::ttd::stages::{EvalFitness, GapIdentify, GapResolve, Merger};
 use crate::ttd::state::{DiffusionState, IdentifiedGap, StepRecord};
 use crate::ttd::term_sheet::PromptProfile;
 use crate::ttd::weights::GRAPH_WEIGHTS;
-use crate::ttd::{TtdConfig, TtdMachine};
+use crate::ttd::TtdMachine;
 
 /// Goodhart instrumentation (2026-06-16): emit each judge dimension's raw 1-5
 /// score so per-dimension variance, saturation, and correlation can be analysed
@@ -1013,14 +1010,12 @@ mod tests {
     /// and computed agreement_levels.
     #[tokio::test]
     async fn stage2_e2e_produces_synthesis() {
-        use std::sync::Mutex;
         use crate::adapter::{ExpertResponse, ResponseProvenance, SourceId};
         use crate::ttd::artifact::{ArgumentationGraph, GraphNode};
         use crate::ttd::stages::synthesis::{
             SynthesisDraftGen, SynthesisGapIdentify, SynthesisGapResolve,
             SynthesisMerger, SynthesisEvalFitness,
         };
-        use crate::ttd::SynthesisArtifact;
         use crate::ttd::post_process::post_process_synthesis;
         use crate::ttd::term_sheet::PromptProfile;
 

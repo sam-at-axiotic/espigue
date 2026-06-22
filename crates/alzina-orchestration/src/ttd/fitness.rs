@@ -42,7 +42,8 @@ use std::collections::HashMap;
 
 use crate::ttd::artifact::{ArgumentationGraph, SynthesisArtifact};
 use crate::ttd::mod_types::TtdError;
-use crate::ttd::weights::{GRAPH_WEIGHTS, NARRATIVE_WEIGHTS, SYNTHESIS_WEIGHTS};
+#[cfg(test)]
+use crate::ttd::weights::{GRAPH_WEIGHTS, SYNTHESIS_WEIGHTS};
 
 // ── Parse ladder result ───────────────────────────────────────────────────────
 

@@ -946,7 +946,7 @@ mod tests {
     use crate::ttd::emit::TtdStage;
     use crate::ttd::mod_types::TtdError;
     use crate::ttd::prompts::narrative::NARRATIVE_PROMPT_VERSION;
-    use crate::ttd::retrieval::{NoopRetriever, Retriever};
+    use crate::ttd::retrieval::Retriever;
     use crate::ttd::stages::RetrievedContext;
 
     // ── Helpers for injected-retriever tests ─────────────────────────────────
@@ -1072,7 +1072,7 @@ mod tests {
         // and verify its retriever is a NoopRetriever by probing it.
         use crate::ttd::artifact::SynthesisArtifact;
 
-        let synthesis = SynthesisArtifact::new(
+        let _synthesis = SynthesisArtifact::new(
             "s", "r", "q", "google/gemini-2.5-flash", "v1/synthesis",
         );
 

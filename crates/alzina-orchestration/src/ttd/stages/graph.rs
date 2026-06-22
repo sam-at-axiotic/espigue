@@ -101,7 +101,7 @@ impl GraphDraftGen {
         &self,
         response: &ExpertResponse,
         executor: &Arc<dyn AgentExecutor>,
-        config: &TtdConfig,
+        _config: &TtdConfig,
         persona_prompt: Option<&str>,
         sampling: Option<crate::executor::SamplingParams>,
     ) -> Result<ArgumentationGraph, TtdError> {
@@ -329,7 +329,6 @@ fn parse_extraction_xml(
     expert_id: &str,
     draft_gen: &GraphDraftGen,
 ) -> Result<ArgumentationGraph, TtdError> {
-    use std::io::BufReader;
     use quick_xml::events::Event;
     use quick_xml::Reader;
 
@@ -545,7 +544,7 @@ impl DraftGen<ArgumentationGraph> for GraphDraftGen {
         &self,
         inputs: &[ExpertResponse],
         executor: &Arc<dyn AgentExecutor>,
-        config: &TtdConfig,
+        _config: &TtdConfig,
         persona_prompt: Option<&str>,
         sampling: Option<crate::executor::SamplingParams>,
     ) -> Result<ArgumentationGraph, TtdError> {
@@ -1366,37 +1365,11 @@ mod tests {
     use crate::adapter::{ExpertResponse, SourceId};
     use crate::executor::AgentExecutor;
     use crate::ttd::artifact::{ArgumentationGraph, GraphNode};
-    use crate::ttd::mod_types::TtdError;
     use crate::ttd::stages::{DraftGen, GapResolve, RetrievedContext};
     use crate::ttd::state::IdentifiedGap;
     use crate::ttd::TtdConfig;
 
     use super::*;
-
-    // ── Mock executor that returns pre-canned XML ─────────────────────────────
-
-    struct XmlMockExecutor {
-        response: String,
-    }
-
-    #[async_trait]
-    impl AgentExecutor for XmlMockExecutor {
-        async fn execute(
-            &self,
-            _agent_id: &alzina_core::identity::AgentId,
-            _instruction: &str,
-            _model: &str,
-            _task: &str,
-        ) -> alzina_core::AlzinaResult<String> {
-            Ok(self.response.clone())
-        }
-    }
-
-    fn make_executor(response: &str) -> Arc<dyn AgentExecutor> {
-        Arc::new(XmlMockExecutor {
-            response: response.to_string(),
-        })
-    }
 
     fn make_expert(id: &str, prose: &str) -> ExpertResponse {
         ExpertResponse {
@@ -1421,7 +1394,6 @@ mod tests {
     async fn extraction_concurrency_capped_at_10() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc as StdArc;
-        use tokio::sync::Mutex;
 
         let in_flight = StdArc::new(AtomicUsize::new(0));
         let max_observed = StdArc::new(AtomicUsize::new(0));
@@ -1592,7 +1564,7 @@ mod tests {
                 _agent_id: &alzina_core::identity::AgentId,
                 _instruction: &str,
                 _model: &str,
-                task: &str,
+                _task: &str,
             ) -> alzina_core::AlzinaResult<String> {
                 self.call_count.fetch_add(1, Ordering::SeqCst);
                 // Return unparseable output so all tiers fail through to heuristic.
@@ -1667,7 +1639,7 @@ mod tests {
                 _agent_id: &alzina_core::identity::AgentId,
                 _instruction: &str,
                 _model: &str,
-                task: &str,
+                _task: &str,
             ) -> alzina_core::AlzinaResult<String> {
                 self.count.fetch_add(1, Ordering::SeqCst);
                 // Return a minimal graph XML for extraction_single.
@@ -2028,7 +2000,7 @@ mod tests {
     /// V2LitReview profile returns V2_GRAPH_WEIGHTS (5 dims) and is_valid_v2.
     #[test]
     fn v2_graph_fitness_returns_v2_weights_and_validity_fn() {
-        use crate::ttd::fitness::{is_valid_v2, FitnessEval};
+        use crate::ttd::fitness::FitnessEval;
         use crate::ttd::term_sheet::PromptProfile;
         use crate::ttd::weights::{GRAPH_WEIGHTS, V2_GRAPH_WEIGHTS};
 

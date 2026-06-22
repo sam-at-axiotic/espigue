@@ -29,8 +29,10 @@ use crate::adapter::ExpertResponse;
 use crate::ttd::artifact::{ArgumentationGraph, SynthesisArtifact};
 use crate::ttd::plan::{render_plan_block, PlanSection, ReviewPlan, BANNED_PHRASES};
 use crate::ttd::term_sheet::{
-    EVIDENCE_GRADES, GAP_TYPES, JudgeDim, NarrativeShape, SUPPORT_LEVELS, V2_JUDGE_DIMS,
+    EVIDENCE_GRADES, GAP_TYPES, JudgeDim, NarrativeShape, SUPPORT_LEVELS,
 };
+#[cfg(test)]
+use crate::ttd::term_sheet::V2_JUDGE_DIMS;
 
 // ── Persona version ───────────────────────────────────────────────────────────
 

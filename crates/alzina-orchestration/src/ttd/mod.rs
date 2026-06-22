@@ -70,7 +70,7 @@ pub use weights::{GRAPH_WEIGHTS, NARRATIVE_WEIGHTS, SYNTHESIS_WEIGHTS, V2_GRAPH_
 use std::sync::Arc;
 
 use crate::executor::AgentExecutor;
-use alzina_search::bib_store::{BibliographyStore, NoopBibliographyStore};
+use alzina_search::bib_store::BibliographyStore;
 
 // ── TtdMachine ────────────────────────────────────────────────────────────────
 

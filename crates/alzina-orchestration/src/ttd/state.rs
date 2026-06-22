@@ -31,7 +31,7 @@ pub struct DiffusionState<A> {
 impl<A> DiffusionState<A> {
     /// Construct a fresh state for `n_trajectories` candidate drafts and
     /// `total_steps` denoise iterations.
-    pub fn new(n_trajectories: usize, total_steps: usize, trajectories: Vec<A>) -> Self {
+    pub fn new(_n_trajectories: usize, total_steps: usize, trajectories: Vec<A>) -> Self {
         Self {
             trajectories,
             steps: Vec::with_capacity(total_steps),

@@ -1098,7 +1098,6 @@ mod tests {
     use crate::ttd::artifact::{Claim, SynthesisArtifact};
     use crate::ttd::fitness::FitnessEval;
     use crate::ttd::mod_types::TtdError;
-    use crate::ttd::retrieval::NoopRetriever;
     use crate::ttd::state::IdentifiedGap;
     use crate::ttd::weights::NARRATIVE_WEIGHTS;
     use crate::ttd::{TtdConfig, TtdMachine};
