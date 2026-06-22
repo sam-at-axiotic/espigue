@@ -19,14 +19,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
-minijinja = { workspace = true }
-# Runtime dep added for CR-01: `tools::url_guard::resolve_host_ips` wraps
-# its blocking stdlib DNS call in `tokio::task::spawn_blocking` so it does
-# not stall the calling executor's worker thread. The `rt` feature alone
-# is enough to get `spawn_blocking`; no full runtime is started here.
-tokio = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-tempfile = "3"
 serde_json = { workspace = true }
-tokio = { workspace = true, features = ["rt", "macros"] }

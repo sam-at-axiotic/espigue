@@ -14,85 +14,30 @@
 //! acceptable only at FFI/bridge boundaries. New types should prefer
 //! `DateTime<Utc>` internally and serialise as ISO-8601 strings.
 
-/// C7.6 (Phase 11 Wave 5): canonical auto-continuation prompt — the
-/// synthetic user-side prompt the daemon's watcher hook (06-02)
-/// sends to the sidecar after a dispatch_pattern's last child
-/// terminates, so the parent continues into synthesis.
-///
-/// Single source of truth: the literal lives here so the daemon's
-/// `ChatService::AUTO_CONTINUATION_PROMPT` and the TUI's
-/// `AUTO_CONTINUATION_SYNTHETIC` (used by the user-bubble filter and
-/// the history-rehydration suppressor) stay byte-identical. Changing
-/// the prompt here flows to both call sites in lockstep — the
-/// "silent-break trap" the register flagged is closed.
-///
-/// Spelled with U+2014 EM DASH (NOT a hyphen) to keep the string
-/// distinctive — the suppressor matches verbatim.
-pub const AUTO_CONTINUATION_PROMPT: &str = "[dispatch pattern complete \u{2014} continue]";
-
-pub mod audit;
-pub mod bootstrap;
-pub mod channel;
-pub mod composition;
-pub mod config;
-pub mod display;
-pub mod domain_registry;
-pub mod engagement;
+// Standalone literature-synthesis slice: only the modules the litreview build
+// reaches. The runtime/governance/memory modules (audit, bootstrap, channel,
+// composition, config, display, domain_registry, engagement, hooks,
+// learnings_parser, memory_types, message, quality, session, templates, tiers,
+// tools, workspace) were vendored from alzina but never reached from this CLI;
+// they have been removed.
 pub mod envelope;
 pub mod error;
 pub mod event;
-pub mod hooks;
 pub mod identity;
-pub mod learnings_parser;
-pub mod memory_types;
-pub mod message;
-pub mod quality;
 pub mod search;
-pub mod session;
-pub mod templates;
-pub mod tiers;
-pub mod tools;
-pub mod workspace;
 
 // Re-export primary types at crate root for convenience
-pub use audit::{AuditEntry, AuditEventType, AuditFilter, AuditLogger, QueryResult};
-pub use bootstrap::{BootstrapContext, BootstrapFragment, BootstrapPipeline, SessionType};
-pub use channel::{ChannelAdapter, ChannelRouter};
-pub use composition::{
-    CombineStrategy, CompNode, CompOp, ExhaustAction, GateCriteria, GateFailAction, GateVerdict,
-};
-pub use config::{ChannelConfig, CronJobConfig, DaemonConfig};
-pub use display::{redact_secrets, sanitize_for_terminal};
-pub use domain_registry::{canonical_domain_mapping, resolve_domain};
-pub use engagement::{
-    BlockingFallbackBroker, DialogueTurn, EngagementBroker, EngagementId, EngagementMode,
-    EngagementRequest, EngagementResolution, FallbackBehavior, ResolutionOutcome, TurnAuthor,
-};
 pub use envelope::{Envelope, EnvelopeStatus, IssueSeverity, QualityIssue, RawEnvelope, Signal};
 pub use error::{AlzinaError, AlzinaResult, GovernanceDetail, SearchDetail, TierViolationDetail};
 pub use event::{
     AlzinaEvent, CompositionDispatchMeta, SpawnCompleted, SpawnEventSink, UnresolvedSubstitution,
 };
-pub use hooks::{
-    AmendKind, EngagedOutcome, HookAction, HookFailure, HookHandler, HookRunner, LifecycleEvent,
-    OrlogSummary,
-};
 pub use identity::{AgentId, Scope, SessionId, WeaveId, WriteTier};
-pub use memory_types::{
-    DeltaSeverity, EntrySection, LearningsProvenance, SemanticType, SourceType, StitchTrigger,
-    TaskCategory, WeaveStatus,
-};
-pub use message::{ChannelKind, InboundMessage, OutboundMessage};
-pub use quality::QualityGate;
 pub use search::{
     EmbeddingService, EmbeddingTask, PREVIEW_MAX_CHARS, SearchIndexHook, SearchQualityReport,
     SearchResultHit, SearchResults, SemanticSearch, VectorFilters, VectorHit, VectorMetadata,
     VectorStore, truncate_for_preview, wrap_low_authority,
 };
-pub use session::{SessionNode, SessionStatus};
-pub use templates::TemplateEngine;
-pub use tiers::{TierDecision, WriteOp, WriteTierEnforcer};
-pub use workspace::WorkspaceManager;
 
 #[cfg(test)]
 mod tests {
@@ -257,35 +202,9 @@ mod tests {
     }
 
     #[test]
-    fn channel_kind_variants() {
-        let kinds = vec![
-            ChannelKind::Webchat,
-            ChannelKind::Discord,
-            ChannelKind::Telegram,
-            ChannelKind::Whatsapp,
-            ChannelKind::Cron,
-            ChannelKind::custom("slack"),
-        ];
-        assert_eq!(kinds.len(), 6);
-    }
-
-    #[test]
     fn alzina_error_display() {
         let err = AlzinaError::Config("missing field".into());
         assert!(err.to_string().contains("missing field"));
-    }
-
-    #[test]
-    fn inbound_message_construction() {
-        let msg = InboundMessage {
-            channel: ChannelKind::Webchat,
-            sender: "operator".into(),
-            content: "hello".into(),
-            thread_id: None,
-            timestamp: chrono::Utc::now(),
-            metadata: std::collections::HashMap::new(),
-        };
-        assert_eq!(msg.content, "hello");
     }
 
     #[test]
@@ -301,42 +220,5 @@ mod tests {
         };
         assert_eq!(env.artifacts.len(), 1);
         assert!(env.signal.is_some());
-    }
-
-    #[test]
-    fn comp_node_construction() {
-        let node = CompNode {
-            agent_id: AgentId::new("muninn"),
-            task: "analyse architecture".into(),
-            model_override: None,
-            tool_overrides: None,
-        };
-        assert_eq!(node.agent_id.as_str(), "muninn");
-    }
-
-    #[test]
-    fn session_status_variants() {
-        let statuses = vec![
-            SessionStatus::Pending,
-            SessionStatus::Bootstrapping,
-            SessionStatus::Running,
-            SessionStatus::AwaitingChildren,
-            SessionStatus::Completing,
-            SessionStatus::Complete(EnvelopeStatus::Complete),
-            SessionStatus::Failed("test error".into()),
-        ];
-        assert_eq!(statuses.len(), 7);
-    }
-
-    #[test]
-    fn daemon_config_construction() {
-        let config = DaemonConfig {
-            workspace_root: std::path::PathBuf::from("/tmp/test"),
-            channels: vec![],
-            cron_jobs: vec![],
-            bind_addr: "127.0.0.1:8080".parse().unwrap(),
-            pid_file: None,
-        };
-        assert_eq!(config.channels.len(), 0);
     }
 }
