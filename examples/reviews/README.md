@@ -14,7 +14,7 @@ Each review ships in two forms: the rendered prose (`.md`) and the full
 structured output (`.synthesis.yaml`) — the same review as machine-readable data,
 with every claim graded and quoted and the field's agreements, disagreements,
 uncertainties, and open gaps as first-class lists. See [The structured
-output](../../crates/cli/README.md#the-structured-output) for the full
+output](../../crates/espigue/README.md#the-structured-output) for the full
 schema.
 
 | Review | Structured | Sources | Claims | Papers | Words |
@@ -27,7 +27,7 @@ schema.
 
 Every citation and quote in these files was mechanically verified against the
 retrieved source text at generation time — see [Why the output is
-trustworthy](../../crates/cli/README.md#why-the-output-is-trustworthy).
+trustworthy](../../crates/espigue/README.md#why-the-output-is-trustworthy).
 
 To generate your own:
 

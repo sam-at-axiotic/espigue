@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  MATURIN_WORKDIR: crates/cli
+  MATURIN_WORKDIR: crates/espigue
 
 jobs:
   linux:

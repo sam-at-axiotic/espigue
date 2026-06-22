@@ -40,7 +40,7 @@ review is a small, queryable knowledge graph of its field.
 Five complete, unedited example reviews — `.md` prose plus full `.synthesis.yaml`
 — are in **[examples/reviews/](examples/reviews/)**. Full documentation and the
 design of the three-stage pipeline are in the package README:
-**[crates/cli/README.md](crates/cli/README.md)**.
+**[crates/espigue/README.md](crates/espigue/README.md)**.
 
 ## Repository layout
 
@@ -49,7 +49,7 @@ wheel via maturin (`bindings = "bin"`).
 
 | Crate | Role |
 | --- | --- |
-| `crates/cli` | The `espigue` binary + the synthesis pipeline (`run_review`) |
+| `crates/espigue` | The `espigue` binary + the synthesis pipeline (`run_review`) |
 | `crates/orchestration` | Test-time-diffusion synthesis engine (TTD + adapter) |
 | `crates/search` | Literature search — RRF fusion, reranking, the vec store |
 | `crates/base` | Shared types, error taxonomy, trait definitions |
@@ -57,10 +57,10 @@ wheel via maturin (`bindings = "bin"`).
 ## Build from source
 
 ```bash
-cargo build --release -p cli      # → target/release/espigue
+cargo build --release -p espigue      # → target/release/espigue
 # or build the wheel:
 pip install maturin
-cd crates/cli && maturin build --release
+cd crates/espigue && maturin build --release
 ```
 
 ## Related project

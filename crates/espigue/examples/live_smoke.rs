@@ -4,17 +4,17 @@
 //! and that rerank returns `relevance_score`.
 //!
 //! Run: `export $(grep '^OPENROUTER_API_KEY=' .env) && \
-//!       cargo run -p cli --example live_smoke`
+//!       cargo run -p espigue --example live_smoke`
 
 use base::identity::AgentId;
 use base::search::{EmbeddingService, EmbeddingTask};
 use orchestration::AgentExecutor;
 
-use cli::openrouter::embeddings::{
+use espigue::openrouter::embeddings::{
     OpenRouterEmbeddingService, DEFAULT_DIMENSIONS, DEFAULT_MODEL,
 };
-use cli::openrouter::executor::OpenRouterExecutor;
-use cli::openrouter::rerank::openrouter_reranker;
+use espigue::openrouter::executor::OpenRouterExecutor;
+use espigue::openrouter::rerank::openrouter_reranker;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

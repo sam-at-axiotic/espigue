@@ -4,7 +4,7 @@ members = [
     "crates/base",
     "crates/search",
     "crates/orchestration",
-    "crates/cli",
+    "crates/espigue",
 ]
 
 [workspace.package]

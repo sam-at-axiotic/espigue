@@ -1,4 +1,4 @@
-//! `litreview` — standalone literature-review synthesis.
+//! `espigue` — standalone literature-review synthesis.
 //!
 //! A thin standalone surface over the Alzina TTD synthesis engine, backed by
 //! OpenRouter for generation, embeddings, and reranking. No daemon, no sidecar,

@@ -6,7 +6,7 @@
 //! prints a non-empty synthesis, the 80%-separable estimate holds and the
 //! OpenRouter executor (Phase 1) can drop straight into the same seam.
 //!
-//! Run: `cargo run -p cli --example spike`
+//! Run: `cargo run -p espigue --example spike`
 
 use std::sync::Arc;
 

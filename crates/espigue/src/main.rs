@@ -15,11 +15,11 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-use cli::context::{ContextConfig, LitContext};
-use cli::ingest::ingest_dir;
-use cli::openrouter::embeddings::{DEFAULT_DIMENSIONS, DEFAULT_MODEL};
-use cli::openrouter::rerank::DEFAULT_RERANK_MODEL;
-use cli::pipeline::{
+use espigue::context::{ContextConfig, LitContext};
+use espigue::ingest::ingest_dir;
+use espigue::openrouter::embeddings::{DEFAULT_DIMENSIONS, DEFAULT_MODEL};
+use espigue::openrouter::rerank::DEFAULT_RERANK_MODEL;
+use espigue::pipeline::{
     parse_prompt_profile, run_review, ReviewOptions, Scope, DEFAULT_MERGER_MODEL, DEFAULT_TOP_K,
 };
 
