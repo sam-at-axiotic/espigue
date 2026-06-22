@@ -8,6 +8,22 @@ Scholar (and your own documents), grounds every claim in retrieved sources, and
 synthesises a review built around the *tensions* in a field. One
 `OPENROUTER_API_KEY` drives generation, embeddings, and reranking.
 
+Two things set it apart. **Every citation and quote is mechanically verified
+against the real source text** — a deterministic check, not the model's word — so
+the review puts a hard floor under the hallucination that plain LLM summarisation
+invites. And it keeps a **persistent local corpus**: every paper it reads, plus
+anything you ingest, accumulates into a queryable memory of a field that you own.
+
+The draft stage is an **evolutionary search**, not a single pass: a population of
+parallel expert drafts competes under adversarial judges, the weakest are culled
+for drifting from their sources, and survivors are rewritten round by round with
+fresh evidence until the fittest is fused into the final review.
+
+It has been evaluated end-to-end with **Haiku driving that draft swarm and a
+single Opus 4.8 call to merge** — the surprising part is how much quality holds
+with the bulk of the reasoning on Haiku. Defaults ship `gemini-2.5-flash` for
+drafts; pass `--model anthropic/claude-haiku-4.5` to reproduce the tested setup.
+
 ```bash
 pip install litreview
 export OPENROUTER_API_KEY=sk-or-...
@@ -38,6 +54,13 @@ cargo build --release -p litreview-cli      # → target/release/litreview
 pip install maturin
 cd crates/litreview-cli && maturin build --release
 ```
+
+## Related project
+
+litreview is a sibling of [Symphonia](https://arc-yh.nihr.ac.uk/research/projects/symphonia-llm-assisted-expert-consensus-platform/),
+an LLM-assisted expert-consensus platform, and shares its synthesis engine with
+[`axiotic-ai/consensus`](https://github.com/axiotic-ai/consensus) — the original
+Python implementation of the test-time-diffusion consensus method ported here.
 
 ## Licence
 

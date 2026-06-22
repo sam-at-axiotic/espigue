@@ -34,7 +34,16 @@ hand-editing — this is the tool's output.
 The full review continues for several thousand words, organised as a
 *problem-lattice* of competing hypotheses with per-claim author-year citations and
 a complete bibliography. Every cited paper is a real source the tool retrieved and
-read, not a model recollection.
+read, not a model recollection — and every citation and quote is mechanically
+verified against that source text (see [Why the output is
+trustworthy](#why-the-output-is-trustworthy)).
+
+litreview has been evaluated end-to-end with **Haiku driving the expert draft
+swarm and a single Opus 4.8 call to merge**. The surprising result is how much of
+this quality holds when the bulk of the reasoning runs on Haiku, with just one
+stronger-model call to fuse the drafts. The shipped default uses
+`gemini-2.5-flash` for the drafts; pass `--model anthropic/claude-haiku-4.5` to
+reproduce the tested setup.
 
 ## Quickstart
 
@@ -92,23 +101,89 @@ Three stages, one command:
    the top sources are promoted to full text where available. A topicality gate
    drops off-question hits. Reranking degrades loudly: if it fails, the un-reranked
    order is kept and the reason is reported — a source is never silently dropped.
-2. **Draft.** A test-time-diffusion engine produces parallel expert drafts grounded
-   in the retrieved panel, each citing the sources it relies on.
-3. **Merge.** A stronger model fuses the drafts into a single review structured
-   around the field's tensions, with author-year citations and a bibliography.
+2. **Draft — evolve, don't sample.** A small population of drafts is written in
+   parallel, each by a different expert persona. Over fixed rounds they improve
+   under selection pressure: adversarial judges score each draft against a rubric,
+   its weakest points are exposed as *gaps*, the retriever pulls fresh evidence for
+   each gap, and the draft is rewritten to close them. A hard validity gate culls
+   any draft that drifts from its sources. The fittest survivor moves on.
+3. **Merge.** A stronger model fuses the surviving drafts into a single review
+   structured around the field's tensions, with author-year citations and a
+   bibliography.
 
 Choose the depth with `--profile`: `v1`/`delphi` (concise), `v2`/`lit-review`, or
 `v3`/`lit-review-long` (the long-form, tension-first format shown above).
 
+### The draft stage is an evolutionary search
+
+It is worth being literal about that middle stage, because it is where the quality
+comes from. Think of it as evolution under selection rather than one model writing
+an essay:
+
+- The swarm of parallel drafts is a **population** of candidate reviews.
+- The judges are the **selection pressure** — a measurable, per-dimension fitness
+  function, with a validity gate that eliminates any draft whose claims are not
+  grounded in real sources.
+- Each round of *identify a gap → retrieve evidence → rewrite* is the **variation**
+  that makes the next generation fitter than the last.
+
+What you read is the fittest survivor of that process, fused into final form —
+bred against grounding, not sampled once and hoped over. (One honest caveat: the
+drafts evolve independently, with no crossover between them, so this is
+population-based refinement under selection, not a genetic algorithm. The useful
+claim is the accurate one — the artifact earns its place by surviving the judges,
+not by sounding confident.)
+
 ## Why the output is trustworthy
 
-The differentiator is the evaluation rigour behind the synthesis. Reviews are
-scored by an LLM judge against a calibrated, per-dimension rubric — grounding,
-citation faithfulness, tension coverage, and argument structure are graded
-separately rather than rolled into one vibe score. Dead or redundant dimensions
-were pruned by running the judge across many corpora and dropping the ones that did
-not discriminate. The result is a generator tuned against measurable quality, not
-just a prompt that sounds confident.
+**Citations and quotes are mechanically verified — the guarantee does not depend
+on the model's honesty.** Every citation resolves to a real source the tool
+retrieved and read, and a deterministic conservation check ensures no source is
+fabricated, dropped, or duplicated between the grounded panel and the final
+review. Every quote is then checked by exact substring match against the cited
+source's stored text: a quote that matches is marked `verified`; a near-miss is
+snapped to the actual sentence in the source; anything that cannot be grounded is
+flagged (`paraphrased` / `absent`) rather than passed off as real.
+
+This catches a failure mode we hit directly in evaluation: a small model writes a
+fluent sentence, labels it a quote, and attaches a real paper — but the words are
+simply not in the source. The verifier rejects those. The effect is a hard floor
+on citation-and-quote hallucination that holds regardless of how confident the
+generator sounds. (Quote verification runs in the `v2` / `v3` lit-review profiles,
+which are the defaults.)
+
+On top of that floor sits quality tuning. Reviews are scored by an LLM judge
+against a calibrated, per-dimension rubric — grounding, citation faithfulness,
+tension coverage, and argument structure are graded separately rather than rolled
+into one vibe score. Dead or redundant dimensions were pruned by running the judge
+across many corpora and dropping the ones that did not discriminate. The generator
+is tuned against measurable quality, not just a prompt that sounds confident.
+
+## A growing corpus you own
+
+litreview keeps a persistent local store (`litreview.db`). Every paper it
+retrieves and reads — abstract, full text where available, chunks, embeddings, and
+bibliography — is written there and reused on the next run. Documents you `ingest`
+join the same store. Over time it becomes a queryable memory of a field that lives
+on your disk, not a provider's.
+
+That persistent corpus, the evolutionary draft swarm that grows reviews over it
+under judge selection, and the mechanical verification above are most of the
+ingredients of a self-improving research loop. The piece that would close it —
+feeding verified outputs back to sharpen retrieval and panel selection — is a
+direction we are pointed at, not a feature that ships today.
+
+## Related project
+
+litreview is a sibling of **[Symphonia][symphonia]**, an LLM-assisted
+expert-consensus platform, and shares its synthesis engine with the
+[`axiotic-ai/consensus`][consensus] project — the original Python implementation
+of the test-time-diffusion consensus method that this Rust engine was ported from.
+The shared idea: ground a panel of sources, draft competing expert views, and
+converge on a verified synthesis rather than a single confident summary.
+
+[symphonia]: https://arc-yh.nihr.ac.uk/research/projects/symphonia-llm-assisted-expert-consensus-platform/
+[consensus]: https://github.com/axiotic-ai/consensus
 
 ## Configuration
 
