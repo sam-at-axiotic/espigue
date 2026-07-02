@@ -321,7 +321,28 @@ impl GapIdentify<SynthesisArtifact> for SynthesisGapIdentify {
         let prompt = match self.profile {
             PromptProfile::V2LitReview | PromptProfile::V3LitReviewLong => {
                 // Serialize the synthesis to XML for the gap identify prompt context.
-                let synthesis_xml = format!("<synthesis><narrative>{}</narrative></synthesis>", draft.narrative);
+                // Claims are included with support level and sources — the prompt asks
+                // the model to name claims needing stronger support, which it cannot do
+                // from the narrative alone.
+                let claims_xml: String = draft
+                    .claims
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let support = c.support_level.as_deref().unwrap_or("unknown");
+                        let sources = c.sources.join(", ");
+                        format!(
+                            "<claim id=\"C{n}\" support_level=\"{support}\" sources=\"{sources}\">{text}</claim>",
+                            n = i + 1,
+                            text = c.text,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let synthesis_xml = format!(
+                    "<synthesis>\n<narrative>{}</narrative>\n<claims>\n{}\n</claims>\n</synthesis>",
+                    draft.narrative, claims_xml
+                );
                 crate::ttd::prompts::lit_review::render_synthesis_gap_identify_v2(
                     &synthesis_xml,
                     if config.question.trim().is_empty() {
