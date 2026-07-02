@@ -727,6 +727,7 @@ impl GapIdentify<ArgumentationGraph> for GraphGapIdentify {
                 } else {
                     config.question.trim()
                 },
+                fitness_feedback.as_deref(),
             )
         } else {
             render_gap_identify(&GapIdentifyInput {

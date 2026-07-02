@@ -504,7 +504,22 @@ If no cross-paper relationships exist, output the graph unchanged.
 ///
 /// D-9: retrieval gap output format (`<description>/<query>`) is dialect-neutral.
 /// Anti-recency applied to query framing.
-pub fn render_gap_identify_v2(graph_xml: &str, question: &str) -> String {
+///
+/// `fitness_feedback` — prior-step judge feedback, embedded only when present
+/// (parity with the v1 gap-identify and the v2 synthesis gap-identify; `None`
+/// renders byte-identically to the pre-feedback prompt).
+pub fn render_gap_identify_v2(
+    graph_xml: &str,
+    question: &str,
+    fitness_feedback: Option<&str>,
+) -> String {
+    let feedback_block = match fitness_feedback {
+        Some(fb) if !fb.trim().is_empty() => format!(
+            "\n## Fitness feedback\n\n\
+             The following weaknesses were identified in the current graph:\n\n{fb}\n"
+        ),
+        _ => String::new(),
+    };
     format!(
         r#"You are identifying gaps in the literature coverage of an argumentation graph.
 
@@ -515,7 +530,7 @@ pub fn render_gap_identify_v2(graph_xml: &str, question: &str) -> String {
 ## Current graph
 
 <graph_context>{graph}</graph_context>
-
+{feedback}
 ## Task
 
 Identify 3-5 gaps in the literature coverage. A gap is a claim or relationship \
@@ -537,6 +552,7 @@ Output ONLY the XML block.
 "#,
         question = question,
         graph = graph_xml,
+        feedback = feedback_block,
     )
 }
 
@@ -2249,7 +2265,16 @@ mod tests {
     // Test: render_gap_identify_v2 still instructs <description>/<query> format.
     #[test]
     fn gap_identify_v2_instructs_retrieval_format() {
-        let graph_prompt = render_gap_identify_v2("<graph/>", "test question");
+        let graph_prompt = render_gap_identify_v2("<graph/>", "test question", None);
+        assert!(
+            !graph_prompt.contains("## Fitness feedback"),
+            "feedback block must collapse when None"
+        );
+        let fed = render_gap_identify_v2("<graph/>", "test question", Some("- **coverage**: score=2"));
+        assert!(
+            fed.contains("## Fitness feedback") && fed.contains("score=2"),
+            "feedback block must render when Some"
+        );
         let synth_prompt = render_synthesis_gap_identify_v2("<synthesis/>", "test question", None);
 
         assert!(graph_prompt.contains("<description>"), "graph gap_identify_v2 missing <description>");
