@@ -642,6 +642,13 @@ pub struct NarrativeEvalFitness {
     /// which keeps run.rs's `weights().len()`-derived call accounting correct.
     /// `None` (default) keeps every existing path byte-identical.
     pub plan: Option<Arc<ReviewPlan>>,
+    /// The fixed Stage-2 synthesis the narrative must reflect. When set, the
+    /// v2 judge prompts carry its claims digest so faithfulness/coverage are
+    /// judged against the review's actual evidence base instead of blind
+    /// (JUDGE-CALIBRATION-PLAN: blind narrative judges pinned faithfulness
+    /// at 2.2 across 10 corpora). `None` (default) keeps the blind prompt —
+    /// byte-identical for existing callers.
+    pub synthesis: Option<SynthesisArtifact>,
 }
 
 impl NarrativeEvalFitness {
@@ -651,6 +658,7 @@ impl NarrativeEvalFitness {
             model: model.into(),
             profile: PromptProfile::V1Delphi, // default: backward compat
             plan: None,
+            synthesis: None,
         }
     }
 
@@ -663,6 +671,13 @@ impl NarrativeEvalFitness {
     /// Set the winning review plan (consuming builder). `None` is a no-op.
     pub fn with_plan(mut self, plan: Option<Arc<ReviewPlan>>) -> Self {
         self.plan = plan;
+        self
+    }
+
+    /// Set the fixed synthesis so v2 judges score against its claims digest
+    /// (consuming builder). `None` keeps the blind judge prompt.
+    pub fn with_synthesis(mut self, synthesis: SynthesisArtifact) -> Self {
+        self.synthesis = Some(synthesis);
         self
     }
 }
@@ -705,12 +720,19 @@ impl EvalFitness<String> for NarrativeEvalFitness {
                 let mut rationales: Vec<(String, String)> =
                     Vec::with_capacity(V2_NARRATIVE_JUDGE_DIMS.len());
 
+                // Claims digest of the fixed synthesis — the judges score the
+                // prose against the evidence base, not blind.
+                let digest = self
+                    .synthesis
+                    .as_ref()
+                    .map(crate::ttd::plan::render_corpus_digest);
+
                 // WR-05: degrade a failed judge spawn to `None`.
                 // Narrative is exempt from traceability veto — see doc comment above.
                 // Dims carry narrative-scoped anchors (shared names/definitions); see
                 // `.planning/JUDGE-CALIBRATION-PLAN.md` (2026-06-19).
                 for dim in V2_NARRATIVE_JUDGE_DIMS.iter() {
-                    let prompt = render_fitness_judge_v2_narrative(dim, draft);
+                    let prompt = render_fitness_judge_v2_narrative(dim, draft, digest.as_deref());
                     let score =
                         match executor.execute(&agent_id, &prompt, &self.model, dim.name).await {
                             Ok(output) => {

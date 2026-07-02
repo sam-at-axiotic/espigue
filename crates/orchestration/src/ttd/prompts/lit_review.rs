@@ -1793,7 +1793,17 @@ pub fn render_fitness_judge_v2_graph(dim: &JudgeDim, graph: &ArgumentationGraph)
 ///
 /// Narrative judges evaluate the narrative text directly — no pseudo-artifact wrapping.
 /// Structure identical to synthesis/graph judges (MAS §9 single-model pattern).
-pub fn render_fitness_judge_v2_narrative(dim: &JudgeDim, narrative: &str) -> String {
+///
+/// `synthesis_digest` — the claims/tensions digest of the fixed Stage-2
+/// synthesis (from `plan::render_corpus_digest`). When present, the judge
+/// scores the prose AGAINST that evidence base; faithfulness and coverage
+/// are unverifiable without it (JUDGE-CALIBRATION-PLAN: blind judges pinned
+/// faithfulness at 2.2). `None` renders the blind prompt byte-identically.
+pub fn render_fitness_judge_v2_narrative(
+    dim: &JudgeDim,
+    narrative: &str,
+    synthesis_digest: Option<&str>,
+) -> String {
     let mut out = String::new();
 
     out.push_str(&format!(
@@ -1818,6 +1828,15 @@ pub fn render_fitness_judge_v2_narrative(dim: &JudgeDim, narrative: &str) -> Str
         "If any aspect surprises you, positively or negatively, \
          note it under **Notable** inside your rationale.\n\n"
     );
+
+    if let Some(digest) = synthesis_digest.filter(|d| !d.trim().is_empty()) {
+        out.push_str(
+            "The narrative was written from the synthesis below — its claims are the \
+             evidence base every assertion must trace to. Judge the narrative against it.\n\n",
+        );
+        out.push_str(digest.trim_end());
+        out.push_str("\n\n");
+    }
 
     out.push_str("## Candidate narrative\n\n");
     out.push_str(narrative);
@@ -2560,7 +2579,20 @@ mod tests {
                          according to multiple independent lines of work (arxiv:2304.07620, s2:abc123). \
                          Contested mechanisms remain an active area of research.";
         for dim in &V2_JUDGE_DIMS {
-            let prompt = render_fitness_judge_v2_narrative(dim, narrative);
+            let prompt = render_fitness_judge_v2_narrative(dim, narrative, None);
+            assert!(
+                !prompt.contains("evidence base every assertion must trace to"),
+                "digest lead-in must collapse when None"
+            );
+            let grounded = render_fitness_judge_v2_narrative(
+                dim,
+                narrative,
+                Some("## Corpus digest (full texts — not titles)\n\n### Claims\n\n[C1] (support: established; evidence: strong) Methane release is accelerating.\n"),
+            );
+            assert!(
+                grounded.contains("Methane release is accelerating."),
+                "digest claims must render into the judge prompt for '{}'", dim.name
+            );
 
             assert!(prompt.contains(dim.name), "narrative judge must contain dim name '{}'", dim.name);
             assert!(prompt.contains(dim.definition), "narrative judge must contain definition for '{}'", dim.name);

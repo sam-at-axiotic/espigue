@@ -859,7 +859,8 @@ fn build_narrative_machine(
         eval_fitness: Some(Box::new(
             NarrativeEvalFitness::new(agent_id, model)
                 .with_profile(profile)
-                .with_plan(plan.clone()),
+                .with_plan(plan.clone())
+                .with_synthesis(synthesis.clone()),
         )),
         merger: Box::new(
             NarrativeMerger::new(agent_id, model, synthesis)
