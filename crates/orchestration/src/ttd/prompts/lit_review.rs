@@ -680,6 +680,12 @@ against the stored source texts.
 }
 
 /// Render v2 Stage-2 plain synthesis draft (no graph).
+///
+/// Uses `V2_OUTPUT_SCHEMA` (author quotes by copying from the paper bodies in
+/// this prompt), NOT `V2_DRAFT_SCHEMA` — the draft schema mandates
+/// `<node_refs>` into "the argumentation graph above", which does not exist
+/// on this path. Unreachable from espigue (Stage 2 is always graph-seeded)
+/// but the instruction must not contradict the context if it ever opens.
 pub fn render_synthesis_draft_v2(
     question: &str,
     inputs: &[ExpertResponse],
@@ -687,7 +693,7 @@ pub fn render_synthesis_draft_v2(
 ) -> String {
     let papers_section = render_papers_section(inputs);
     let vocab = render_vocabulary_block();
-    let schema = V2_DRAFT_SCHEMA.replace("{target_length}", target_length);
+    let schema = V2_OUTPUT_SCHEMA.replace("{target_length}", target_length);
 
     format!(
         r#"You are writing a critical review of the literature on this question, synthesising {n} papers.
