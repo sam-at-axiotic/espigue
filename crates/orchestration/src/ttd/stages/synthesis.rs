@@ -802,7 +802,10 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
         // B2: fork prompt on profile — v2 uses lit_review::render_synthesis_merger_v2.
         // Decision 0: v3 = v2 (Stage-2 merger; the 500-800 target is the synthesis
         // narrative length, NOT the Stage-3 constraint — untouched by Phase 0).
-        let prompt = match self.profile {
+        // v2/v3 renders as a (system, user) pair: stable instructions ride the
+        // system channel where chat APIs weight them highest; executors without
+        // a system channel concatenate via the trait default.
+        let (system, prompt) = match self.profile {
             PromptProfile::V2LitReview | PromptProfile::V3LitReviewLong => {
                 let candidate_refs: Vec<&SynthesisArtifact> = candidates.iter().collect();
                 // F14 (option B): give the Opus merger the FULL graph's verified
@@ -851,7 +854,7 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                         "ttd_perf: F14 merger graph-evidence (option B — full graph to Opus)"
                     );
                 }
-                crate::ttd::prompts::lit_review::render_synthesis_merger_v2(
+                let (system, user) = crate::ttd::prompts::lit_review::render_synthesis_merger_v2_split(
                     &candidate_refs,
                     if config.question.trim().is_empty() {
                         "Merge synthesis candidates"
@@ -861,18 +864,24 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                     "500-800",
                     &node_evidence,
                     &self.tier_map,
-                )
+                );
+                (Some(system), user)
             }
             PromptProfile::V1Delphi => {
-                render_synthesis_merger(&SynthesisMergerInput { candidates })
+                (None, render_synthesis_merger(&SynthesisMergerInput { candidates }))
             }
         };
         let agent_id = AgentId::new(self.agent_id.as_str());
 
-        let output = executor
-            .execute(&agent_id, &prompt, &self.model, "synthesis_merger")
-            .await
-            .map_err(|e| TtdError::SpawnFailed(e.to_string()))?;
+        let output = match system {
+            Some(sys) => {
+                executor
+                    .execute_with_system(&agent_id, &sys, &prompt, &self.model, "synthesis_merger")
+                    .await
+            }
+            None => executor.execute(&agent_id, &prompt, &self.model, "synthesis_merger").await,
+        }
+        .map_err(|e| TtdError::SpawnFailed(e.to_string()))?;
 
         parse_synthesis_xml(&output, &self.model, &self.prompt_version, self.profile)
     }

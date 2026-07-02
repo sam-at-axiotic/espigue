@@ -859,8 +859,8 @@ pub fn render_synthesis_gap_resolve_full_v2(
 /// the field agrees on it. Grounded in the sections; no speculation past them.
 const MECHANISM_DEPTH_BLOCK: &str = r#"## Depth of each claim
 
-The `context section` blocks above are the real prose around each quoted passage —
-the paper's own method, results, and ablation text. Use them. A claim's text must
+The `context section` blocks under '## Quote evidence' are the real prose around each
+quoted passage — the paper's own method, results, and ablation text. Use them. A claim's text must
 convey the IDEA itself, at a level a domain expert can act on, not just the
 field's position on it. For each claim, where the sections support it, state:
 
@@ -897,13 +897,20 @@ fn render_sources_with_tier(
         .join(", ")
 }
 
-pub fn render_synthesis_merger_v2(
+/// Render the v2 merger prompt as a (system, user) pair.
+///
+/// System carries the stable instruction set — role, quote-authoring rules,
+/// depth, vocabulary, guards, re-weave, conflict path, merge rules — where
+/// instruction-following weight is highest on chat APIs. User carries the
+/// per-run data (question, candidates, node evidence) with the output schema
+/// LAST, so the contract sits closest to generation on long contexts.
+pub fn render_synthesis_merger_v2_split(
     candidates: &[&SynthesisArtifact],
     question: &str,
     target_length: &str,
     node_evidence: &str,
     tier_map: &std::collections::BTreeMap<String, search::CredibilityTier>,
-) -> String {
+) -> (String, String) {
     let vocab = render_vocabulary_block();
     // F14: the merger authors verbatim quotes by copying from node evidence and
     // tagging each with its node id; it also preserves the candidates' node_refs.
@@ -946,31 +953,22 @@ pub fn render_synthesis_merger_v2(
         .collect::<Vec<_>>()
         .join("\n");
 
-    format!(
-        r#"You are merging {n} synthesis candidates into one authoritative review.
+    let system = format!(
+        r#"You are merging synthesis candidates into one authoritative literature review. \
+The user message carries the research question, the candidates, and a '## Quote evidence' \
+section — the graph's DB-verified quotes, grouped by source paper, each tagged with its node id.
 
-## Research question
+## Quote authoring rules
 
-{question}
-
-## Candidates
-
-{candidates}
-
-## Quote evidence (verified verbatim passages from the argumentation graph)
-
-Below are the graph's DB-verified quotes, grouped by source paper, each tagged
-with its node id. For every claim you author, look up the claim's cited
-source(s), find the node(s) under those source(s) whose quote best supports the
-claim, and copy ONE verbatim quote into the claim, tagging it with that node id:
-`<quote source="PAPER_ID" node="NODE_ID">copied text</quote>`. Copy
-character-for-character — quotes are checked mechanically. Set the claim's
-`<node_refs>` to the node id(s) you quoted from. Do NOT invent quotes or copy
-from anywhere else. If no node under the claim's sources has a passage that
-genuinely supports it, omit the quote (it is attached deterministically
+For every claim you author, look up the claim's cited source(s) in the '## Quote evidence' \
+section, find the node(s) under those source(s) whose quote best supports the claim, and copy \
+ONE verbatim quote into the claim, tagging it with that node id: \
+`<quote source="PAPER_ID" node="NODE_ID">copied text</quote>`. Copy \
+character-for-character — quotes are checked mechanically. Set the claim's \
+`<node_refs>` to the node id(s) you quoted from. Do NOT invent quotes or copy \
+from anywhere else. If no node under the claim's sources has a passage that \
+genuinely supports it, omit the quote (it is attached deterministically \
 afterwards) — never fabricate one.
-
-{node_evidence}
 
 {depth}
 
@@ -988,12 +986,32 @@ afterwards) — never fabricate one.
 - When candidates disagree on support_level for the same claim, choose the level \
   best supported by the evidence_grade of the sourcing papers — not by candidate rank.
 - Preserve all lineage, method, year, and evidence_grade fields from the best-evidenced candidate.
-- Set each claim's `<node_refs>` to the graph node id(s) you quoted from above.
+- Set each claim's `<node_refs>` to the graph node id(s) you quoted from the '## Quote evidence' section.
 - Do not manufacture new claims not present in any candidate.
-- Source ID rule: the "Candidate N" section headings above are presentation labels for working
+- Source ID rule: the "Candidate N" section headings are presentation labels for working
   drafts. They are never valid source ids. Every `<source id>` in your output MUST be a
   paper id from the provenance headers (arxiv:/s2:/doi namespaces) — never "Candidate1",
   "Candidate2", or any other candidate label.
+"#,
+        depth = MECHANISM_DEPTH_BLOCK,
+        vocab = vocab,
+        guards = GUARDS_BLOCK,
+        reweave = REWEAVE_BLOCK,
+        conflict_path = CONFLICT_PATH,
+    );
+
+    let user = format!(
+        r#"## Research question
+
+{question}
+
+## Candidates ({n})
+
+{candidates}
+
+## Quote evidence (verified verbatim passages from the argumentation graph)
+
+{node_evidence}
 
 {schema}
 "#,
@@ -1005,13 +1023,25 @@ afterwards) — never fabricate one.
         } else {
             node_evidence.to_string()
         },
-        depth = MECHANISM_DEPTH_BLOCK,
-        vocab = vocab,
-        guards = GUARDS_BLOCK,
-        reweave = REWEAVE_BLOCK,
-        conflict_path = CONFLICT_PATH,
         schema = schema,
-    )
+    );
+
+    (system, user)
+}
+
+/// Single-string form of the v2 merger prompt — the split halves joined.
+/// Used by executors without a system-message channel and by tests; composing
+/// from `render_synthesis_merger_v2_split` keeps the two forms drift-free.
+pub fn render_synthesis_merger_v2(
+    candidates: &[&SynthesisArtifact],
+    question: &str,
+    target_length: &str,
+    node_evidence: &str,
+    tier_map: &std::collections::BTreeMap<String, search::CredibilityTier>,
+) -> String {
+    let (system, user) =
+        render_synthesis_merger_v2_split(candidates, question, target_length, node_evidence, tier_map);
+    format!("{system}\n\n{user}")
 }
 
 /// Render v2 revision prompt (D-8) — replaces aggregator_revision on the v2 path.
