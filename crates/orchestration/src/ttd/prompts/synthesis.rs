@@ -852,9 +852,9 @@ Your role: ensure the synthesis accurately represents source material without in
 |------|------------|
 | **5** | Fully Faithful: Every statement traces directly to sources. No novel claims. |
 | **4** | Highly Faithful: All statements trace to sources. Minor rephrasing only. |
-| **3** | Moderately Faithful: 80-90%% of statements trace to sources. |
-| **2** | Poorly Faithful: 30-50%% of statements trace to sources. Significant distortion. |
-| **1** | Unfaithful: <30%% of statements trace to sources. |
+| **3** | Moderately Faithful: 80-90% of statements trace to sources. |
+| **2** | Poorly Faithful: 30-50% of statements trace to sources. Significant distortion. |
+| **1** | Unfaithful: <30% of statements trace to sources. |
 
 **Critical**: Scores below 4 mean the artefact is INVALID for Delphi controlled feedback.
 {footer}
@@ -938,9 +938,9 @@ Your role: ensure every statement can be traced to specific sources via explicit
 |------|------------|
 | **5** | Fully Traceable: Every claim has at least one specific source citation. |
 | **4** | Highly Traceable: 90%+ claims cited; minor gaps only. |
-| **3** | Moderately Traceable: 70-90%% claims cited. |
-| **2** | Poorly Traceable: 50-70%% claims cited. |
-| **1** | Untraceable: Less than 50%% claims have citations. |
+| **3** | Moderately Traceable: 70-90% claims cited. |
+| **2** | Poorly Traceable: 50-70% claims cited. |
+| **1** | Untraceable: Less than 50% claims have citations. |
 {footer}
 "#,
         claims = claims,
