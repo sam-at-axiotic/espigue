@@ -217,17 +217,24 @@ async fn decompose_seed_queries(
 ) -> Vec<String> {
     use base::identity::AgentId;
 
+    // Example-bleed guard (live probe 2026-07-02): the illustration below is
+    // deliberately from a field far from this tool's typical questions. A
+    // same-domain example (the old 'Byzantine fault tolerance' one) leaked
+    // into the generated queries and steered retrieval toward the example's
+    // topic instead of the question's.
     let prompt = format!(
         "Decompose this research question into short literature search queries for \
          Semantic Scholar / arXiv. Produce TWO kinds:\n\
          1. FACET queries (4 to 6): 2-6 word phrases covering the question's distinct \
          facets, in the question's own terminology.\n\
          2. FOUNDATIONAL queries (1 to 2): the classical or foundational work the \
-         subject is built on. Use the general, field-standard terminology and DROP \
-         the modern framing words — for a question about multi-agent LLMs, omit \
-         'LLM'/'agent' and name the underlying theory directly (e.g. 'Byzantine fault \
-         tolerance consensus', 'Condorcet jury theorem', 'ensemble voting methods'). \
-         These surface the foundational literature that the modern-framed queries miss.\n\
+         subject is built on. Use the general, field-standard terminology of the \
+         question's own field and DROP the modern framing words. Illustration from an \
+         unrelated field: for a question about mRNA vaccine thermostability, \
+         foundational queries would be 'lipid nanoparticle formulation' and 'RNA \
+         degradation kinetics'. Derive the actual terms from THIS question's field — \
+         never reuse the illustration's vocabulary. These surface the foundational \
+         literature that the modern-framed queries miss.\n\
          Output ONLY the queries, one per line — no numbering, no group labels, no \
          bullets, no commentary.\n\n\
          Research question: {question}"
@@ -319,20 +326,26 @@ async fn topicality_gate(
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Example-bleed guard (live probe 2026-07-02): illustration kept far from
+    // this tool's typical questions, with an explicit do-not-match-on-it
+    // instruction — a same-domain example biased the gate's keep decisions
+    // toward the example's topic.
     let prompt = format!(
         "You are screening retrieved papers for topical relevance to a research \
          question.\n\
          A paper is ON-TOPIC if it studies the question's actual subject. It is \
          ALSO on-topic if it supplies the FOUNDATIONAL theory the subject is built \
          on — even when it predates the question's modern framing or comes from the \
-         classical/adjacent field the subject inherits from (for a question about \
-         consensus in multi-agent LLM systems, a classical Byzantine-fault-tolerance \
-         or voting-theory paper IS on-topic foundational grounding, keep it).\n\
-         A paper is OFF-TOPIC only when it shares surface vocabulary but belongs to \
-         an unrelated APPLICATION domain — for example, for that same question, a \
-         multi-agent-debate paper about phishing detection, video forensics, urban \
-         prediction, or agriculture is OFF-TOPIC. When unsure between foundational \
-         grounding and wrong-domain, keep the paper.\n\n\
+         classical/adjacent field the subject inherits from.\n\
+         A paper is OFF-TOPIC only when it shares surface vocabulary with the \
+         question but belongs to an unrelated APPLICATION domain.\n\
+         Illustration from an unrelated field: for a question about mRNA vaccine \
+         thermostability, a classical lipid-chemistry paper on nanoparticle \
+         formulation IS on-topic foundational grounding (keep it), while a paper \
+         using the same stability vocabulary for canned-food shelf life is OFF-TOPIC \
+         (drop it). Judge THIS question's candidates by its own field — the \
+         illustration's vocabulary is irrelevant to your decision.\n\
+         When unsure between foundational grounding and wrong-domain, keep the paper.\n\n\
          Research question:\n{question}\n\n\
          Candidates:\n{listing}\n\n\
          List the indices of the ON-TOPIC papers only, comma-separated (for example \
