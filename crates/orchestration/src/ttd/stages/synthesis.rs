@@ -943,12 +943,19 @@ impl EvalFitness<SynthesisArtifact> for SynthesisEvalFitness {
                 use crate::ttd::term_sheet::V2_JUDGE_DIMS;
 
                 let mut scores: Vec<(String, Option<u8>)> = Vec::with_capacity(5);
+                let mut rationales: Vec<(String, String)> = Vec::with_capacity(5);
 
                 // WR-05: degrade a failed spawn to None, do NOT abort.
                 for dim in &V2_JUDGE_DIMS {
                     let prompt = render_fitness_judge_v2_synthesis(dim, draft);
                     let score = match executor.execute(&agent_id, &prompt, &self.model, dim.name).await {
-                        Ok(output) => parse_fitness_score(&output),
+                        Ok(output) => {
+                            let parsed = crate::ttd::fitness::parse_fitness_response(&output);
+                            if !parsed.rationale.trim().is_empty() {
+                                rationales.push((dim.name.to_string(), parsed.rationale));
+                            }
+                            parsed.score
+                        }
                         Err(e) => {
                             tracing::debug!(
                                 dimension = dim.name,
@@ -969,7 +976,7 @@ impl EvalFitness<SynthesisArtifact> for SynthesisEvalFitness {
                 // F13: pass panel_ids so the allowlist covers panel-member expert ids
                 // (shape lane handles non-panel arxiv:/s2: ids without panel data).
                 let veto = traceability_veto_synthesis(draft, &self.panel_ids);
-                let eval = FitnessEval::new(scores);
+                let eval = FitnessEval::new(scores).with_rationales(rationales);
                 Ok(if let Some(reason) = veto { eval.with_veto(reason) } else { eval })
             }
 

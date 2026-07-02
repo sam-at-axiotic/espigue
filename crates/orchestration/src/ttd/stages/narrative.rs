@@ -702,6 +702,8 @@ impl EvalFitness<String> for NarrativeEvalFitness {
 
                 let mut scores: Vec<(String, Option<u8>)> =
                     Vec::with_capacity(V2_NARRATIVE_JUDGE_DIMS.len());
+                let mut rationales: Vec<(String, String)> =
+                    Vec::with_capacity(V2_NARRATIVE_JUDGE_DIMS.len());
 
                 // WR-05: degrade a failed judge spawn to `None`.
                 // Narrative is exempt from traceability veto — see doc comment above.
@@ -711,7 +713,13 @@ impl EvalFitness<String> for NarrativeEvalFitness {
                     let prompt = render_fitness_judge_v2_narrative(dim, draft);
                     let score =
                         match executor.execute(&agent_id, &prompt, &self.model, dim.name).await {
-                            Ok(output) => parse_fitness_score(&output),
+                            Ok(output) => {
+                                let parsed = crate::ttd::fitness::parse_fitness_response(&output);
+                                if !parsed.rationale.trim().is_empty() {
+                                    rationales.push((dim.name.to_string(), parsed.rationale));
+                                }
+                                parsed.score
+                            }
                             Err(e) => {
                                 tracing::debug!(
                                     dimension = dim.name,
@@ -738,7 +746,13 @@ impl EvalFitness<String> for NarrativeEvalFitness {
                         .execute(&agent_id, &prompt, &self.model, "plan_conformance")
                         .await
                     {
-                        Ok(output) => parse_fitness_score(&output),
+                        Ok(output) => {
+                            let parsed = crate::ttd::fitness::parse_fitness_response(&output);
+                            if !parsed.rationale.trim().is_empty() {
+                                rationales.push(("plan_conformance".to_string(), parsed.rationale));
+                            }
+                            parsed.score
+                        }
                         Err(e) => {
                             tracing::debug!(
                                 dimension = "plan_conformance",
@@ -752,7 +766,7 @@ impl EvalFitness<String> for NarrativeEvalFitness {
                 }
 
                 // No veto — narrative pseudo-artifact has empty sources by construction.
-                Ok(FitnessEval::new(scores))
+                Ok(FitnessEval::new(scores).with_rationales(rationales))
             }
 
             PromptProfile::V1Delphi => {

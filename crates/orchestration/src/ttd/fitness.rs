@@ -269,18 +269,39 @@ pub struct FitnessEval {
     /// sorts it last, and `generate_feedback` prepends a HARD FAIL section.
     /// Always `None` from `new(scores)` — v1 call sites unaffected.
     pub veto: Option<String>,
+    /// Judge rationales as (dimension_name, rationale) pairs. The judges are
+    /// instructed to quote the passages that drove each score; carrying the
+    /// rationale lets `generate_feedback` say WHY a dimension scored low
+    /// instead of only naming it. Empty from `new(scores)` — v1 evaluate
+    /// loops never populate it, so v1 feedback stays byte-identical.
+    pub rationales: Vec<(String, String)>,
 }
 
 impl FitnessEval {
     /// Convenience constructor. `veto` defaults to `None` — v1 call sites unchanged.
     pub fn new(scores: Vec<(String, Option<u8>)>) -> Self {
-        Self { scores, veto: None }
+        Self { scores, veto: None, rationales: Vec::new() }
     }
 
     /// Attach a traceability veto reason. Consuming builder — call after `new`.
     pub fn with_veto(mut self, reason: impl Into<String>) -> Self {
         self.veto = Some(reason.into());
         self
+    }
+
+    /// Attach judge rationales. Consuming builder — call after `new`.
+    /// Empty-rationale entries are dropped at render time, not here.
+    pub fn with_rationales(mut self, rationales: Vec<(String, String)>) -> Self {
+        self.rationales = rationales;
+        self
+    }
+
+    /// Named rationale lookup (non-empty rationales only).
+    pub fn rationale(&self, dim: &str) -> Option<&str> {
+        self.rationales
+            .iter()
+            .find(|(k, r)| k == dim && !r.trim().is_empty())
+            .map(|(_, r)| r.as_str())
     }
 
     /// True if all score dimensions are None (total parse failure).
@@ -577,10 +598,27 @@ pub fn generate_feedback(eval: &FitnessEval, threshold: u8) -> String {
     let mut priority: Vec<String> = Vec::new();
     let mut strengths: Vec<String> = Vec::new();
 
+    // Judge rationale, appended under a priority dim so the reviser sees WHY
+    // the dimension scored low, not just its number. Bounded so one verbose
+    // judge cannot dominate the feedback document. Empty when the evaluate
+    // loop did not collect rationales (v1 paths) — output byte-identical.
+    const RATIONALE_CAP_CHARS: usize = 700;
+    let rationale_line = |dim: &str| -> String {
+        match eval.rationale(dim) {
+            Some(r) => {
+                let r = r.trim();
+                let clipped: String = r.chars().take(RATIONALE_CAP_CHARS).collect();
+                let ellipsis = if r.chars().count() > RATIONALE_CAP_CHARS { "…" } else { "" };
+                format!("\n  Judge: {clipped}{ellipsis}")
+            }
+            None => String::new(),
+        }
+    };
+
     for (dim, score) in &eval.scores {
         match score {
             Some(s) if *s <= threshold => {
-                priority.push(format!("- **{}**: score={s}", dim));
+                priority.push(format!("- **{}**: score={s}{}", dim, rationale_line(dim)));
             }
             Some(s) => {
                 strengths.push(format!("- **{}**: score={s}", dim));
@@ -822,6 +860,49 @@ mod tests {
         assert!(prio_section.contains("groundedness"), "groundedness must be in priority");
         let strength_section = doc.split("## Strengths to Preserve").nth(1).unwrap_or("");
         assert!(strength_section.contains("coverage"), "coverage must be in strengths");
+    }
+
+    /// Judge rationales attached via `with_rationales` render under the
+    /// priority dim (with "Judge:" prefix); strengths never carry rationale;
+    /// an eval WITHOUT rationales renders byte-identically to before (no
+    /// "Judge:" line) — the v1 paths never populate rationales.
+    #[test]
+    fn generate_feedback_renders_priority_rationales_only() {
+        let eval = graph_eval(&[("groundedness", Some(2)), ("coverage", Some(5))])
+            .with_rationales(vec![
+                ("groundedness".into(), "Node X quotes a passage absent from its source.".into()),
+                ("coverage".into(), "All papers reflected.".into()),
+            ]);
+        let doc = generate_feedback(&eval, 3);
+        assert!(
+            doc.contains("Judge: Node X quotes a passage absent from its source."),
+            "priority dim must carry its judge rationale: {doc}"
+        );
+        assert!(
+            !doc.contains("All papers reflected."),
+            "strength dims must not carry rationale: {doc}"
+        );
+
+        // No rationales → no Judge lines (v1 byte-identity).
+        let bare = graph_eval(&[("groundedness", Some(2)), ("coverage", Some(5))]);
+        let bare_doc = generate_feedback(&bare, 3);
+        assert!(!bare_doc.contains("Judge:"), "bare eval must render no Judge line");
+    }
+
+    /// Over-long rationales are clipped to the cap with an ellipsis so one
+    /// verbose judge cannot dominate the feedback document.
+    #[test]
+    fn generate_feedback_clips_long_rationales() {
+        let long = "x".repeat(2000);
+        let eval = graph_eval(&[("groundedness", Some(1))])
+            .with_rationales(vec![("groundedness".into(), long)]);
+        let doc = generate_feedback(&eval, 3);
+        assert!(doc.contains("Judge: "), "clipped rationale still renders");
+        assert!(doc.contains('…'), "clipped rationale ends with ellipsis");
+        assert!(
+            !doc.contains(&"x".repeat(800)),
+            "rationale must be clipped below 800 consecutive chars"
+        );
     }
 
     // ── Parse ladder tests (ENGINE-03 fitness.py:597-723) ─────────────────────
