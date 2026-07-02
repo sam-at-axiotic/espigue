@@ -598,19 +598,14 @@ pub fn generate_feedback(eval: &FitnessEval, threshold: u8) -> String {
     let mut priority: Vec<String> = Vec::new();
     let mut strengths: Vec<String> = Vec::new();
 
-    // Judge rationale, appended under a priority dim so the reviser sees WHY
-    // the dimension scored low, not just its number. Bounded so one verbose
-    // judge cannot dominate the feedback document. Empty when the evaluate
-    // loop did not collect rationales (v1 paths) — output byte-identical.
-    const RATIONALE_CAP_CHARS: usize = 700;
+    // Judge rationale, appended in full under a priority dim so the reviser
+    // sees WHY the dimension scored low, not just its number. Full text by
+    // design (Sam, 2026-07-02): the rationale quotes the failing passages —
+    // clipping it cuts exactly the evidence the rewrite needs. Empty when the
+    // evaluate loop did not collect rationales (v1 paths) — output byte-identical.
     let rationale_line = |dim: &str| -> String {
         match eval.rationale(dim) {
-            Some(r) => {
-                let r = r.trim();
-                let clipped: String = r.chars().take(RATIONALE_CAP_CHARS).collect();
-                let ellipsis = if r.chars().count() > RATIONALE_CAP_CHARS { "…" } else { "" };
-                format!("\n  Judge: {clipped}{ellipsis}")
-            }
+            Some(r) => format!("\n  Judge: {}", r.trim()),
             None => String::new(),
         }
     };
@@ -889,19 +884,17 @@ mod tests {
         assert!(!bare_doc.contains("Judge:"), "bare eval must render no Judge line");
     }
 
-    /// Over-long rationales are clipped to the cap with an ellipsis so one
-    /// verbose judge cannot dominate the feedback document.
+    /// Rationales render IN FULL — the rationale quotes the failing passages,
+    /// and clipping it would cut exactly the evidence the rewrite needs.
     #[test]
-    fn generate_feedback_clips_long_rationales() {
+    fn generate_feedback_renders_full_rationale_unclipped() {
         let long = "x".repeat(2000);
         let eval = graph_eval(&[("groundedness", Some(1))])
-            .with_rationales(vec![("groundedness".into(), long)]);
+            .with_rationales(vec![("groundedness".into(), long.clone())]);
         let doc = generate_feedback(&eval, 3);
-        assert!(doc.contains("Judge: "), "clipped rationale still renders");
-        assert!(doc.contains('…'), "clipped rationale ends with ellipsis");
         assert!(
-            !doc.contains(&"x".repeat(800)),
-            "rationale must be clipped below 800 consecutive chars"
+            doc.contains(&format!("Judge: {long}")),
+            "the full rationale must render, unclipped"
         );
     }
 
