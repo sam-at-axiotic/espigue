@@ -1564,6 +1564,7 @@ pub async fn run_review(
         &question_id,
     )
     .with_run_id(run_id.clone())
+    .with_question(&trimmed)
     .with_stage_retrievers(live_retriever, local_retriever)
     .with_profile(profile)
     .with_panel_refresher(Arc::new(LitPanelRefresher {

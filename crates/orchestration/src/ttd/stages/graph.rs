@@ -722,7 +722,11 @@ impl GapIdentify<ArgumentationGraph> for GraphGapIdentify {
             let graph_xml = draft.to_xml_string();
             crate::ttd::prompts::lit_review::render_gap_identify_v2(
                 &graph_xml,
-                "Identify gaps in the argumentation graph coverage",
+                if config.question.trim().is_empty() {
+                    "Identify gaps in the argumentation graph coverage"
+                } else {
+                    config.question.trim()
+                },
             )
         } else {
             render_gap_identify(&GapIdentifyInput {

@@ -97,7 +97,7 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
         &self,
         inputs: &[ExpertResponse],
         executor: &Arc<dyn AgentExecutor>,
-        _config: &TtdConfig,
+        config: &TtdConfig,
         persona_prompt: Option<&str>,
         sampling: Option<crate::executor::SamplingParams>,
     ) -> Result<SynthesisArtifact, TtdError> {
@@ -106,6 +106,11 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
             SynthesisDraftGraphInput, SynthesisDraftInput,
         };
         use base::identity::AgentId;
+
+        // The caller's research question, when supplied, fills the prompt's
+        // "## Research question" slot; empty keeps the pre-question
+        // placeholder (byte-stable for existing callers).
+        let question = config.question.trim();
 
         // use_graph_draft branch (synthesis_tasks.py:131-133):
         // Pick draft_graph when self._graph is not None.
@@ -119,8 +124,13 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
                         n_nodes = graph.nodes.len(),
                         "SynthesisDraftGen: v2 graph-based draft"
                     );
+                    let question = if question.is_empty() {
+                        format!("Synthesise the argumentation graph from {} papers", inputs.len())
+                    } else {
+                        question.to_string()
+                    };
                     crate::ttd::prompts::lit_review::render_synthesis_draft_graph_v2(
-                        &format!("Synthesise the argumentation graph from {} papers", inputs.len()),
+                        &question,
                         graph,
                         inputs,
                         "500-800",
@@ -128,7 +138,7 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
                 } else {
                     tracing::debug!("SynthesisDraftGen: v2 plain draft");
                     crate::ttd::prompts::lit_review::render_synthesis_draft_v2(
-                        "Synthesise the papers",
+                        if question.is_empty() { "Synthesise the papers" } else { question },
                         inputs,
                         "500-800",
                     )
@@ -314,7 +324,11 @@ impl GapIdentify<SynthesisArtifact> for SynthesisGapIdentify {
                 let synthesis_xml = format!("<synthesis><narrative>{}</narrative></synthesis>", draft.narrative);
                 crate::ttd::prompts::lit_review::render_synthesis_gap_identify_v2(
                     &synthesis_xml,
-                    "Identify coverage gaps",
+                    if config.question.trim().is_empty() {
+                        "Identify coverage gaps"
+                    } else {
+                        config.question.trim()
+                    },
                     fitness_feedback.as_deref(),
                 )
             }
@@ -755,7 +769,7 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
         &self,
         candidates: &[SynthesisArtifact],
         executor: &Arc<dyn AgentExecutor>,
-        _config: &TtdConfig,
+        config: &TtdConfig,
     ) -> Result<SynthesisArtifact, TtdError> {
         use crate::ttd::prompts::synthesis::{render_synthesis_merger, SynthesisMergerInput};
         use base::identity::AgentId;
@@ -818,7 +832,11 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                 }
                 crate::ttd::prompts::lit_review::render_synthesis_merger_v2(
                     &candidate_refs,
-                    "Merge synthesis candidates",
+                    if config.question.trim().is_empty() {
+                        "Merge synthesis candidates"
+                    } else {
+                        config.question.trim()
+                    },
                     "500-800",
                     &node_evidence,
                     &self.tier_map,

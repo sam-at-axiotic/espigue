@@ -104,6 +104,15 @@ pub struct TtdConfig {
     /// their retrieval is real and their empty-retrieved guard is genuine
     /// consensus reproduction (Smidr stress map, seam 3).
     pub resolve_without_retrieval: bool,
+
+    /// The research question the review answers, verbatim from the caller.
+    ///
+    /// Threaded into the v2/v3 stage prompts that carry a "## Research
+    /// question" slot (Stage-1/2 gap identify, Stage-2 draft and merger) and
+    /// into the plan tournament. Empty (the default) keeps every prompt
+    /// byte-identical to the pre-question behaviour: each call site falls back
+    /// to its previous placeholder string.
+    pub question: String,
 }
 
 impl Default for TtdConfig {
@@ -130,6 +139,7 @@ impl Default for TtdConfig {
             max_concurrent_fitness_evals: 5, // proven fan-out width from probe-10
             plan_mode: crate::ttd::plan::PlanMode::Disabled, // Phase 1 opt-in only
             resolve_without_retrieval: false, // Phase P opt-in only — default byte-stable
+            question: String::new(), // empty → placeholder fallbacks, byte-stable
         }
     }
 }

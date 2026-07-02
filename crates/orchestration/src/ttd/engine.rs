@@ -204,6 +204,17 @@ impl EngineConfig {
         self
     }
 
+    /// Set the research question text, verbatim from the caller.
+    ///
+    /// Threaded (via `ttd_config.question`) into every v2/v3 prompt that
+    /// carries a "## Research question" slot and into the plan tournament.
+    /// Unset (empty) keeps each call site on its previous placeholder string —
+    /// byte-identical to pre-question behaviour.
+    pub fn with_question(mut self, question: impl Into<String>) -> Self {
+        self.ttd_config.question = question.into();
+        self
+    }
+
     /// Inject one retriever for both Stage 1 (graph) and Stage 2 (synthesis).
     ///
     /// Sets `retriever` and `retriever_local` to the same Arc. Backward-compatible:
@@ -558,6 +569,7 @@ pub async fn run_engine_with_bib(
             model,
             config.profile.narrative_shape(),
             n_drafts,
+            &config.ttd_config.question,
         )
         .await
         {

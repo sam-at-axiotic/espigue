@@ -723,8 +723,28 @@ fails selection.";
 /// Carries the full-text corpus digest (C-N1), the archetype rubric, and the
 /// element categories the plan must declare. Under `Concise` shape the
 /// skeleton/budget elements are omitted (D0-dep, spec §3).
-pub fn render_plan_draft(synthesis: &SynthesisArtifact, shape: NarrativeShape) -> String {
+///
+/// `question` is the caller's research question, verbatim. Non-empty, it is
+/// rendered ahead of the digest and the focal-question element is anchored to
+/// it — the plan argues an answer to the USER's question, not one invented
+/// from the corpus alone. Empty renders nothing (byte-identical to the
+/// pre-question prompt).
+pub fn render_plan_draft(
+    synthesis: &SynthesisArtifact,
+    shape: NarrativeShape,
+    question: &str,
+) -> String {
     let digest = render_corpus_digest(synthesis);
+    let question = question.trim();
+    let question_block = if question.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "## Research question (the review's remit)\n\n{question}\n\n\
+             The plan's <focal_question> must be an arguable sharpening of this \
+             question — never an unrelated question the corpus happens to suggest.\n\n"
+        )
+    };
 
     let skeleton_block = match shape {
         NarrativeShape::SectionedLongForm => {
@@ -770,7 +790,7 @@ pub fn render_plan_draft(synthesis: &SynthesisArtifact, shape: NarrativeShape) -
 The plan is the declared target every later draft will be checked against. It must \
 organise THIS corpus (full claim and tension texts below), not a generic review shape.
 
-{digest}
+{question_block}{digest}
 
 {rubric}
 
@@ -824,6 +844,7 @@ Output EXACTLY this XML (element-only, no attributes):
 pub fn render_plan_redraft(
     synthesis: &SynthesisArtifact,
     shape: NarrativeShape,
+    question: &str,
     previous_plan_raw: &str,
     feedback: &str,
 ) -> String {
@@ -831,7 +852,7 @@ pub fn render_plan_redraft(
         "{base}\n## Your previous plan (selected as best of {n}, but failing validity)\n\n\
          {previous}\n\n## What must change\n\n{feedback}\n\n\
          Redraft the FULL plan XML, fixing only what the feedback names — keep what works.\n",
-        base = render_plan_draft(synthesis, shape),
+        base = render_plan_draft(synthesis, shape, question),
         n = PLAN_TOURNAMENT_DRAFTS,
         previous = previous_plan_raw,
         feedback = feedback,
@@ -1090,12 +1111,13 @@ pub async fn run_plan_tournament(
     model: &str,
     shape: NarrativeShape,
     n_drafts: usize,
+    question: &str,
 ) -> Result<PlanTournamentOutcome, TtdError> {
     use base::identity::AgentId;
 
     let agent_id = AgentId::new(agent_id_str);
     let digest = render_corpus_digest(synthesis);
-    let draft_prompt = render_plan_draft(synthesis, shape);
+    let draft_prompt = render_plan_draft(synthesis, shape, question);
     let mut calls_used: usize = 0;
 
     // Step 1: n single-shot drafts (sequential — plan calls are small and the
@@ -1144,7 +1166,7 @@ pub async fn run_plan_tournament(
             Some(reason) => format!("HARD FAIL: {reason}"),
             None => crate::ttd::fitness::generate_feedback(&winner.eval, 3),
         };
-        let redraft_prompt = render_plan_redraft(synthesis, shape, &winner.raw, &feedback);
+        let redraft_prompt = render_plan_redraft(synthesis, shape, question, &winner.raw, &feedback);
         calls_used += 1;
         let raw = match executor
             .execute(&agent_id, &redraft_prompt, model, "plan_redraft")
@@ -1562,7 +1584,7 @@ mod tests {
     #[test]
     fn plan_draft_prompt_rubric_and_d0_partition() {
         let synthesis = sample_synthesis(2);
-        let long = render_plan_draft(&synthesis, NarrativeShape::SectionedLongForm);
+        let long = render_plan_draft(&synthesis, NarrativeShape::SectionedLongForm, "");
         assert!(long.contains("narrative-arc"));
         assert!(long.contains("problem-lattice"));
         assert!(long.contains("mece-taxonomy"));
@@ -1582,7 +1604,7 @@ mod tests {
             "descriptive-heading steer present (kills 'Problem N')"
         );
 
-        let concise = render_plan_draft(&synthesis, NarrativeShape::Concise);
+        let concise = render_plan_draft(&synthesis, NarrativeShape::Concise, "");
         assert!(!concise.contains("<sections>"), "no skeleton under Concise (D0-dep)");
         assert!(concise.contains("<term_registry>"), "core fields stay (D0-indep)");
         assert!(concise.contains("<planted_threads>"));
@@ -1679,6 +1701,7 @@ mod tests {
             "test-model",
             NarrativeShape::SectionedLongForm,
             PLAN_TOURNAMENT_DRAFTS,
+            "",
         )
         .await
         .expect("tournament must succeed");
@@ -1721,6 +1744,7 @@ mod tests {
             "test-model",
             NarrativeShape::SectionedLongForm,
             PLAN_TOURNAMENT_DRAFTS,
+            "",
         )
         .await
         .expect("tournament must succeed");
@@ -1750,6 +1774,7 @@ mod tests {
             "test-model",
             NarrativeShape::Concise,
             1,
+            "",
         )
         .await
         .expect("single planner must succeed");
