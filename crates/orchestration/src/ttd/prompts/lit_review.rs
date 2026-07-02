@@ -1225,7 +1225,18 @@ pub fn render_narrative_critique_v2(
     synthesis: &SynthesisArtifact,
     fitness_feedback: Option<&str>,
 ) -> String {
-    let synthesis_claims_count = synthesis.claims.len();
+    // The critique is judged AGAINST the synthesis, so the synthesis claims
+    // must be in context — a count alone leaves faithfulness unverifiable.
+    let claims_summary: String = synthesis
+        .claims
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let support = c.support_level.as_deref().unwrap_or("unknown");
+            format!("[C{n}] ({support}) {text}", n = i + 1, text = c.text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     // C-N2: prior-step fitness, embedded only when present. Default path passes
     // `None` — the block collapses to empty and the prompt is byte-identical.
     let feedback_block = match fitness_feedback {
@@ -1242,7 +1253,9 @@ pub fn render_narrative_critique_v2(
 {feedback_block}
 ## Synthesis it should reflect ({n} claims)
 
-Evaluate the narrative against the synthesis. Identify:
+{claims}
+
+Evaluate the narrative against the synthesis claims above. Identify:
 
 1. **Faithfulness** — Does it accurately represent the synthesis claims? Any distortions?
 2. **Tension visibility** — Does it present contested claims with both sides? Are disputes visible or smoothed over?
@@ -1250,12 +1263,23 @@ Evaluate the narrative against the synthesis. Identify:
 4. **Support level honesty** — Are established findings stated plainly? Are emerging/single-source claims appropriately qualified?
 5. **Anti-degeneration** — Does it avoid hedging, listing, formulaic phrases, or recency bias?
 
-Provide specific, actionable feedback on each criterion. Quote passages that need improvement.
+Do NOT score. Report each weakness as a gap: specific, actionable, quoting the passage that needs improvement.
 
-Do NOT score — provide textual critique only.
+## Output
+
+Output ONLY the XML block. If the narrative is faithful and complete, output an empty <gaps/>.
+
+```xml
+<gaps>
+  <gap>
+    <description>Which criterion fails, the quoted passage, and what the rewrite must do</description>
+  </gap>
+</gaps>
+```
 "#,
         narrative = narrative,
-        n = synthesis_claims_count,
+        n = synthesis.claims.len(),
+        claims = claims_summary,
     )
 }
 
