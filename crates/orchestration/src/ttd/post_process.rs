@@ -488,59 +488,22 @@ pub fn compute_agreement_levels(
 /// no per-source quote field under the current schema. Write-back is Phase 25
 /// scope (paired with the SourceReference schema change in WR-03).
 async fn resolve_quotes(
-    mut synthesis: SynthesisArtifact,
-    panel: &[ExpertResponse],
-    executor: &Arc<dyn AgentExecutor>,
+    synthesis: SynthesisArtifact,
+    _panel: &[ExpertResponse],
+    _executor: &Arc<dyn AgentExecutor>,
 ) -> Result<SynthesisArtifact, TtdError> {
-    use crate::ttd::prompts::synthesis::{render_synthesis_quote_resolve, SynthesisQuoteResolveInput};
-    use base::identity::AgentId;
-
-    // Build source texts for the quote_resolve prompt.
-    let source_texts: Vec<(String, String)> = panel
-        .iter()
-        .map(|r| (r.expert_id.as_str().to_string(), r.prose.clone()))
-        .collect();
-
-    let input = SynthesisQuoteResolveInput {
-        draft: &synthesis,
-        source_texts: &source_texts,
-    };
-    let prompt = render_synthesis_quote_resolve(&input);
-
-    let agent_id = AgentId::new("quote-resolver");
-    // Model comes from the artifact (= EngineConfig.model), NOT a hardcoded
-    // string: a pin here bypasses the deployment's model routing (live probe
-    // 2026-06-10 — engine completed all three stages on the overridden model,
-    // then this spawn died on the unservable hardcoded one).
-    let output = executor
-        .execute(&agent_id, &prompt, &synthesis.model, "quote_resolve")
-        .await
-        .map_err(|e| TtdError::SpawnFailed(e.to_string()))?;
-
-    // WR-07: apply_resolved_quotes is a stub under the current schema — it does
-    // not write quotes back. See its doc comment.
-    apply_resolved_quotes(&mut synthesis, &output);
-
-    Ok(synthesis)
-}
-
-/// Stub for applying quote_resolve output back to the synthesis claims.
-///
-/// WR-07 — HONESTY NOTE: this does NOT write resolved quotes back. The
-/// quote_resolve spawn returns a `<quotes>` block keyed
-/// `<claim id="..."><source id="..."><quote>...</quote></source></claim>`, but
-/// `Claim.sources` is a bare `Vec<String>` of paper IDs with no quote field to
-/// attach a resolved quote to. Faithful write-back needs the SourceReference
-/// schema change (paired with WR-03), which is Phase 25 scope.
-///
-/// We deliberately do NOT parse-then-discard the XML (the previous version did,
-/// which read as a working apply step while doing nothing). When the schema
-/// lands, parse `output` here and match claim/source IDs to attach quotes.
-fn apply_resolved_quotes(_synthesis: &mut SynthesisArtifact, _output: &str) {
+    // WR-07: the apply step is a Phase-25 stub (no SourceReference quote field
+    // to write back), so the spawn's output could never take effect. The spawn
+    // is therefore NOT fired — it was one paid LLM call per run with zero
+    // effect on the artifact. When the SourceReference schema lands, restore
+    // the spawn here: render_synthesis_quote_resolve over the panel prose,
+    // model from the artifact (never hardcoded — live probe 2026-06-10), then
+    // a real apply_resolved_quotes.
     tracing::debug!(
-        "quote_resolve: apply step is a Phase-25 stub (no SourceReference quote \
-         field to write back under the current schema) — output not applied"
+        "quote_resolve: spawn skipped — apply step is a Phase-25 stub, \
+         output could not be written back (WR-07)"
     );
+    Ok(synthesis)
 }
 
 // ── Step 5: Verify synthesis quotes (LIGHTWEIGHT STUB — see WR-03) ───────────
@@ -1528,11 +1491,14 @@ mod tests {
         );
     }
 
-    // ── Test 3: quote_resolve spawn invoked ───────────────────────────────────
+    // ── Test 3: quote_resolve spawn NOT fired (WR-07 stub) ────────────────────
 
-    /// post_process_synthesis runs the quote_resolve spawn as a governed dispatch.
+    /// quote_resolve does NOT spawn: the apply step is a Phase-25 stub, so the
+    /// spawn's output could never take effect — firing it was one paid LLM
+    /// call per v1 run with zero artifact effect. When the SourceReference
+    /// schema lands and write-back becomes real, invert this test again.
     #[tokio::test]
-    async fn quote_resolve_spawn_invoked() {
+    async fn quote_resolve_spawn_skipped_while_apply_is_stub() {
         let invocations = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
         let executor: Arc<dyn crate::executor::AgentExecutor> = Arc::new(RecordingExecutor {
             invocations: invocations.clone(),
@@ -1552,8 +1518,8 @@ mod tests {
 
         let invoked = invocations.lock().unwrap().clone();
         assert!(
-            invoked.contains(&"quote_resolve".to_string()),
-            "quote_resolve must be invoked as a governed spawn: {invoked:?}"
+            !invoked.contains(&"quote_resolve".to_string()),
+            "quote_resolve must NOT spawn while apply is a stub: {invoked:?}"
         );
     }
 
