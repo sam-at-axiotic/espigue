@@ -307,9 +307,10 @@ pub struct SynthesisGapIdentifyInput<'a> {
 pub fn render_synthesis_gap_identify(input: &SynthesisGapIdentifyInput) -> String {
     use super::render::render_sources_comma_joined;
 
-    // Claims section (section iteration)
+    // Claims section (section iteration). IDs are 1-indexed C1, C2, … so the
+    // gap output can name the claim it targets.
     let mut claims_section = String::new();
-    for claim in &input.draft.claims {
+    for (i, claim) in input.draft.claims.iter().enumerate() {
         let level = claim.agreement_level.as_deref().unwrap_or("divided");
         let sources_str = render_sources_comma_joined(&claim.sources);
         let ca_str = if claim.counterarguments.is_empty() {
@@ -321,8 +322,8 @@ pub fn render_synthesis_gap_identify(input: &SynthesisGapIdentifyInput) -> Strin
             )
         };
         claims_section.push_str(&format!(
-            "- **[{id}]** ({level}): \"{text}\"\n  Sources: {sources}\n{ca}",
-            id = "C",
+            "- **[C{n}]** ({level}): \"{text}\"\n  Sources: {sources}\n{ca}",
+            n = i + 1,
             level = level,
             text = claim.text,
             sources = sources_str,
@@ -771,13 +772,16 @@ pub struct SynthesisFitnessInput<'a> {
 }
 
 fn render_synthesis_claims_for_fitness(draft: &SynthesisArtifact) -> String {
+    // 1-indexed C1, C2, … — the fitness footer requires the rationale to
+    // "reference specific claim IDs", which needs the IDs to exist.
     let mut buf = String::new();
-    for claim in &draft.claims {
+    for (i, claim) in draft.claims.iter().enumerate() {
         let level = claim.agreement_level.as_deref().unwrap_or("divided");
         use super::render::render_sources_comma_joined;
         let sources = render_sources_comma_joined(&claim.sources);
         buf.push_str(&format!(
-            "- **[C]** ({level}): \"{text}\"\n  Sources: {sources}\n",
+            "- **[C{n}]** ({level}): \"{text}\"\n  Sources: {sources}\n",
+            n = i + 1,
             level = level,
             text = claim.text,
             sources = sources,
@@ -1271,14 +1275,16 @@ For each claim, include `corroboration_count` attribute indicating how many of t
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
 /// Render a claims section for use in synthesis prompts.
+/// IDs are 1-indexed C1, C2, … so downstream steps can reference claims.
 fn render_claims_section(claims: &[crate::ttd::artifact::Claim]) -> String {
     use super::render::render_sources_comma_joined;
     let mut buf = String::new();
-    for claim in claims {
+    for (i, claim) in claims.iter().enumerate() {
         let level = claim.agreement_level.as_deref().unwrap_or("divided");
         let sources = render_sources_comma_joined(&claim.sources);
         buf.push_str(&format!(
-            "- **[C]** ({level}): \"{text}\"\n  Sources: {sources}\n",
+            "- **[C{n}]** ({level}): \"{text}\"\n  Sources: {sources}\n",
+            n = i + 1,
             level = level,
             text = claim.text,
             sources = sources,
