@@ -124,12 +124,27 @@ pub(crate) async fn post_json_with_retry(
             }
         }
 
+        // Jitter breaks the lockstep herd: without it, N concurrent callers
+        // that hit the same 429 with no Retry-After all sleep exactly
+        // backoff_base and re-fire simultaneously. A server-provided
+        // Retry-After is used as sent — that pacing is the server's call.
         let wait = wait_hint
-            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1))
+            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1) + jitter())
             .min(policy.max_wait);
         tokio::time::sleep(wait).await;
         attempt += 1;
     }
+}
+
+/// 0–1s of clock-derived jitter (subsecond nanos), avoiding a rand
+/// dependency. Concurrent tasks reach here at different instants, which is
+/// all the decorrelation the backoff herd needs.
+fn jitter() -> Duration {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    Duration::from_millis(u64::from(nanos % 1000))
 }
 
 /// Parse an integer-seconds `Retry-After` header. HTTP-date values are rare
