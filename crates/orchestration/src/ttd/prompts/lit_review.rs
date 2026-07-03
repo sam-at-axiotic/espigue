@@ -504,7 +504,22 @@ If no cross-paper relationships exist, output the graph unchanged.
 ///
 /// D-9: retrieval gap output format (`<description>/<query>`) is dialect-neutral.
 /// Anti-recency applied to query framing.
-pub fn render_gap_identify_v2(graph_xml: &str, question: &str) -> String {
+///
+/// `fitness_feedback` — prior-step judge feedback, embedded only when present
+/// (parity with the v1 gap-identify and the v2 synthesis gap-identify; `None`
+/// renders byte-identically to the pre-feedback prompt).
+pub fn render_gap_identify_v2(
+    graph_xml: &str,
+    question: &str,
+    fitness_feedback: Option<&str>,
+) -> String {
+    let feedback_block = match fitness_feedback {
+        Some(fb) if !fb.trim().is_empty() => format!(
+            "\n## Fitness feedback\n\n\
+             The following weaknesses were identified in the current graph:\n\n{fb}\n"
+        ),
+        _ => String::new(),
+    };
     format!(
         r#"You are identifying gaps in the literature coverage of an argumentation graph.
 
@@ -515,7 +530,7 @@ pub fn render_gap_identify_v2(graph_xml: &str, question: &str) -> String {
 ## Current graph
 
 <graph_context>{graph}</graph_context>
-
+{feedback}
 ## Task
 
 Identify 3-5 gaps in the literature coverage. A gap is a claim or relationship \
@@ -537,6 +552,7 @@ Output ONLY the XML block.
 "#,
         question = question,
         graph = graph_xml,
+        feedback = feedback_block,
     )
 }
 
@@ -664,6 +680,12 @@ against the stored source texts.
 }
 
 /// Render v2 Stage-2 plain synthesis draft (no graph).
+///
+/// Uses `V2_OUTPUT_SCHEMA` (author quotes by copying from the paper bodies in
+/// this prompt), NOT `V2_DRAFT_SCHEMA` — the draft schema mandates
+/// `<node_refs>` into "the argumentation graph above", which does not exist
+/// on this path. Unreachable from espigue (Stage 2 is always graph-seeded)
+/// but the instruction must not contradict the context if it ever opens.
 pub fn render_synthesis_draft_v2(
     question: &str,
     inputs: &[ExpertResponse],
@@ -671,7 +693,7 @@ pub fn render_synthesis_draft_v2(
 ) -> String {
     let papers_section = render_papers_section(inputs);
     let vocab = render_vocabulary_block();
-    let schema = V2_DRAFT_SCHEMA.replace("{target_length}", target_length);
+    let schema = V2_OUTPUT_SCHEMA.replace("{target_length}", target_length);
 
     format!(
         r#"You are writing a critical review of the literature on this question, synthesising {n} papers.
@@ -837,8 +859,8 @@ pub fn render_synthesis_gap_resolve_full_v2(
 /// the field agrees on it. Grounded in the sections; no speculation past them.
 const MECHANISM_DEPTH_BLOCK: &str = r#"## Depth of each claim
 
-The `context section` blocks above are the real prose around each quoted passage —
-the paper's own method, results, and ablation text. Use them. A claim's text must
+The `context section` blocks under '## Quote evidence' are the real prose around each
+quoted passage — the paper's own method, results, and ablation text. Use them. A claim's text must
 convey the IDEA itself, at a level a domain expert can act on, not just the
 field's position on it. For each claim, where the sections support it, state:
 
@@ -875,13 +897,20 @@ fn render_sources_with_tier(
         .join(", ")
 }
 
-pub fn render_synthesis_merger_v2(
+/// Render the v2 merger prompt as a (system, user) pair.
+///
+/// System carries the stable instruction set — role, quote-authoring rules,
+/// depth, vocabulary, guards, re-weave, conflict path, merge rules — where
+/// instruction-following weight is highest on chat APIs. User carries the
+/// per-run data (question, candidates, node evidence) with the output schema
+/// LAST, so the contract sits closest to generation on long contexts.
+pub fn render_synthesis_merger_v2_split(
     candidates: &[&SynthesisArtifact],
     question: &str,
     target_length: &str,
     node_evidence: &str,
     tier_map: &std::collections::BTreeMap<String, search::CredibilityTier>,
-) -> String {
+) -> (String, String) {
     let vocab = render_vocabulary_block();
     // F14: the merger authors verbatim quotes by copying from node evidence and
     // tagging each with its node id; it also preserves the candidates' node_refs.
@@ -924,31 +953,22 @@ pub fn render_synthesis_merger_v2(
         .collect::<Vec<_>>()
         .join("\n");
 
-    format!(
-        r#"You are merging {n} synthesis candidates into one authoritative review.
+    let system = format!(
+        r#"You are merging synthesis candidates into one authoritative literature review. \
+The user message carries the research question, the candidates, and a '## Quote evidence' \
+section — the graph's DB-verified quotes, grouped by source paper, each tagged with its node id.
 
-## Research question
+## Quote authoring rules
 
-{question}
-
-## Candidates
-
-{candidates}
-
-## Quote evidence (verified verbatim passages from the argumentation graph)
-
-Below are the graph's DB-verified quotes, grouped by source paper, each tagged
-with its node id. For every claim you author, look up the claim's cited
-source(s), find the node(s) under those source(s) whose quote best supports the
-claim, and copy ONE verbatim quote into the claim, tagging it with that node id:
-`<quote source="PAPER_ID" node="NODE_ID">copied text</quote>`. Copy
-character-for-character — quotes are checked mechanically. Set the claim's
-`<node_refs>` to the node id(s) you quoted from. Do NOT invent quotes or copy
-from anywhere else. If no node under the claim's sources has a passage that
-genuinely supports it, omit the quote (it is attached deterministically
+For every claim you author, look up the claim's cited source(s) in the '## Quote evidence' \
+section, find the node(s) under those source(s) whose quote best supports the claim, and copy \
+ONE verbatim quote into the claim, tagging it with that node id: \
+`<quote source="PAPER_ID" node="NODE_ID">copied text</quote>`. Copy \
+character-for-character — quotes are checked mechanically. Set the claim's \
+`<node_refs>` to the node id(s) you quoted from. Do NOT invent quotes or copy \
+from anywhere else. If no node under the claim's sources has a passage that \
+genuinely supports it, omit the quote (it is attached deterministically \
 afterwards) — never fabricate one.
-
-{node_evidence}
 
 {depth}
 
@@ -966,12 +986,32 @@ afterwards) — never fabricate one.
 - When candidates disagree on support_level for the same claim, choose the level \
   best supported by the evidence_grade of the sourcing papers — not by candidate rank.
 - Preserve all lineage, method, year, and evidence_grade fields from the best-evidenced candidate.
-- Set each claim's `<node_refs>` to the graph node id(s) you quoted from above.
+- Set each claim's `<node_refs>` to the graph node id(s) you quoted from the '## Quote evidence' section.
 - Do not manufacture new claims not present in any candidate.
-- Source ID rule: the "Candidate N" section headings above are presentation labels for working
+- Source ID rule: the "Candidate N" section headings are presentation labels for working
   drafts. They are never valid source ids. Every `<source id>` in your output MUST be a
   paper id from the provenance headers (arxiv:/s2:/doi namespaces) — never "Candidate1",
   "Candidate2", or any other candidate label.
+"#,
+        depth = MECHANISM_DEPTH_BLOCK,
+        vocab = vocab,
+        guards = GUARDS_BLOCK,
+        reweave = REWEAVE_BLOCK,
+        conflict_path = CONFLICT_PATH,
+    );
+
+    let user = format!(
+        r#"## Research question
+
+{question}
+
+## Candidates ({n})
+
+{candidates}
+
+## Quote evidence (verified verbatim passages from the argumentation graph)
+
+{node_evidence}
 
 {schema}
 "#,
@@ -983,13 +1023,25 @@ afterwards) — never fabricate one.
         } else {
             node_evidence.to_string()
         },
-        depth = MECHANISM_DEPTH_BLOCK,
-        vocab = vocab,
-        guards = GUARDS_BLOCK,
-        reweave = REWEAVE_BLOCK,
-        conflict_path = CONFLICT_PATH,
         schema = schema,
-    )
+    );
+
+    (system, user)
+}
+
+/// Single-string form of the v2 merger prompt — the split halves joined.
+/// Used by executors without a system-message channel and by tests; composing
+/// from `render_synthesis_merger_v2_split` keeps the two forms drift-free.
+pub fn render_synthesis_merger_v2(
+    candidates: &[&SynthesisArtifact],
+    question: &str,
+    target_length: &str,
+    node_evidence: &str,
+    tier_map: &std::collections::BTreeMap<String, search::CredibilityTier>,
+) -> String {
+    let (system, user) =
+        render_synthesis_merger_v2_split(candidates, question, target_length, node_evidence, tier_map);
+    format!("{system}\n\n{user}")
 }
 
 /// Render v2 revision prompt (D-8) — replaces aggregator_revision on the v2 path.
@@ -1225,7 +1277,18 @@ pub fn render_narrative_critique_v2(
     synthesis: &SynthesisArtifact,
     fitness_feedback: Option<&str>,
 ) -> String {
-    let synthesis_claims_count = synthesis.claims.len();
+    // The critique is judged AGAINST the synthesis, so the synthesis claims
+    // must be in context — a count alone leaves faithfulness unverifiable.
+    let claims_summary: String = synthesis
+        .claims
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let support = c.support_level.as_deref().unwrap_or("unknown");
+            format!("[C{n}] ({support}) {text}", n = i + 1, text = c.text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     // C-N2: prior-step fitness, embedded only when present. Default path passes
     // `None` — the block collapses to empty and the prompt is byte-identical.
     let feedback_block = match fitness_feedback {
@@ -1242,7 +1305,9 @@ pub fn render_narrative_critique_v2(
 {feedback_block}
 ## Synthesis it should reflect ({n} claims)
 
-Evaluate the narrative against the synthesis. Identify:
+{claims}
+
+Evaluate the narrative against the synthesis claims above. Identify:
 
 1. **Faithfulness** — Does it accurately represent the synthesis claims? Any distortions?
 2. **Tension visibility** — Does it present contested claims with both sides? Are disputes visible or smoothed over?
@@ -1250,12 +1315,23 @@ Evaluate the narrative against the synthesis. Identify:
 4. **Support level honesty** — Are established findings stated plainly? Are emerging/single-source claims appropriately qualified?
 5. **Anti-degeneration** — Does it avoid hedging, listing, formulaic phrases, or recency bias?
 
-Provide specific, actionable feedback on each criterion. Quote passages that need improvement.
+Do NOT score. Report each weakness as a gap: specific, actionable, quoting the passage that needs improvement.
 
-Do NOT score — provide textual critique only.
+## Output
+
+Output ONLY the XML block. If the narrative is faithful and complete, output an empty <gaps/>.
+
+```xml
+<gaps>
+  <gap>
+    <description>Which criterion fails, the quoted passage, and what the rewrite must do</description>
+  </gap>
+</gaps>
+```
 "#,
         narrative = narrative,
-        n = synthesis_claims_count,
+        n = synthesis.claims.len(),
+        claims = claims_summary,
     )
 }
 
@@ -1753,7 +1829,17 @@ pub fn render_fitness_judge_v2_graph(dim: &JudgeDim, graph: &ArgumentationGraph)
 ///
 /// Narrative judges evaluate the narrative text directly — no pseudo-artifact wrapping.
 /// Structure identical to synthesis/graph judges (MAS §9 single-model pattern).
-pub fn render_fitness_judge_v2_narrative(dim: &JudgeDim, narrative: &str) -> String {
+///
+/// `synthesis_digest` — the claims/tensions digest of the fixed Stage-2
+/// synthesis (from `plan::render_corpus_digest`). When present, the judge
+/// scores the prose AGAINST that evidence base; faithfulness and coverage
+/// are unverifiable without it (JUDGE-CALIBRATION-PLAN: blind judges pinned
+/// faithfulness at 2.2). `None` renders the blind prompt byte-identically.
+pub fn render_fitness_judge_v2_narrative(
+    dim: &JudgeDim,
+    narrative: &str,
+    synthesis_digest: Option<&str>,
+) -> String {
     let mut out = String::new();
 
     out.push_str(&format!(
@@ -1778,6 +1864,15 @@ pub fn render_fitness_judge_v2_narrative(dim: &JudgeDim, narrative: &str) -> Str
         "If any aspect surprises you, positively or negatively, \
          note it under **Notable** inside your rationale.\n\n"
     );
+
+    if let Some(digest) = synthesis_digest.filter(|d| !d.trim().is_empty()) {
+        out.push_str(
+            "The narrative was written from the synthesis below — its claims are the \
+             evidence base every assertion must trace to. Judge the narrative against it.\n\n",
+        );
+        out.push_str(digest.trim_end());
+        out.push_str("\n\n");
+    }
 
     out.push_str("## Candidate narrative\n\n");
     out.push_str(narrative);
@@ -2225,7 +2320,16 @@ mod tests {
     // Test: render_gap_identify_v2 still instructs <description>/<query> format.
     #[test]
     fn gap_identify_v2_instructs_retrieval_format() {
-        let graph_prompt = render_gap_identify_v2("<graph/>", "test question");
+        let graph_prompt = render_gap_identify_v2("<graph/>", "test question", None);
+        assert!(
+            !graph_prompt.contains("## Fitness feedback"),
+            "feedback block must collapse when None"
+        );
+        let fed = render_gap_identify_v2("<graph/>", "test question", Some("- **coverage**: score=2"));
+        assert!(
+            fed.contains("## Fitness feedback") && fed.contains("score=2"),
+            "feedback block must render when Some"
+        );
         let synth_prompt = render_synthesis_gap_identify_v2("<synthesis/>", "test question", None);
 
         assert!(graph_prompt.contains("<description>"), "graph gap_identify_v2 missing <description>");
@@ -2511,7 +2615,20 @@ mod tests {
                          according to multiple independent lines of work (arxiv:2304.07620, s2:abc123). \
                          Contested mechanisms remain an active area of research.";
         for dim in &V2_JUDGE_DIMS {
-            let prompt = render_fitness_judge_v2_narrative(dim, narrative);
+            let prompt = render_fitness_judge_v2_narrative(dim, narrative, None);
+            assert!(
+                !prompt.contains("evidence base every assertion must trace to"),
+                "digest lead-in must collapse when None"
+            );
+            let grounded = render_fitness_judge_v2_narrative(
+                dim,
+                narrative,
+                Some("## Corpus digest (full texts — not titles)\n\n### Claims\n\n[C1] (support: established; evidence: strong) Methane release is accelerating.\n"),
+            );
+            assert!(
+                grounded.contains("Methane release is accelerating."),
+                "digest claims must render into the judge prompt for '{}'", dim.name
+            );
 
             assert!(prompt.contains(dim.name), "narrative judge must contain dim name '{}'", dim.name);
             assert!(prompt.contains(dim.definition), "narrative judge must contain definition for '{}'", dim.name);

@@ -28,7 +28,7 @@ use sqlx::SqlitePool;
 
 use base::search::{EmbeddingService, EmbeddingTask};
 
-use crate::lit_gateway::{Acquire, Endpoint, LitGateway, RetryAdvice};
+use crate::lit_gateway::{Acquire, Endpoint, LitGateway};
 use crate::lit_intake::{persist_arxiv_abstract, persist_s2_abstract};
 use crate::lit_schema::{paper_is_ingested, s2_cache_get, s2_cache_put, s2_cache_put_if_absent};
 use crate::s2_enrichment::{resolve_paper_id, S2CallError, S2Client, S2PaperFull};
@@ -182,14 +182,7 @@ async fn cached_search_papers(
 
     let result = gateway
         .with_backoff(Endpoint::S2, || async {
-            s2.search_papers(query, limit).await.map_err(|e: S2CallError| {
-                let is_retry = e.status.map(|s| s == 429 || s >= 500).unwrap_or(false);
-                if is_retry {
-                    RetryAdvice::Retry { error: e.message, retry_after: e.retry_after }
-                } else {
-                    RetryAdvice::Fatal(e.message)
-                }
-            })
+            s2.search_papers(query, limit).await.map_err(|e: S2CallError| e.into_retry_advice())
         })
         .await;
 
@@ -247,14 +240,7 @@ async fn cached_get_citations(
         .with_backoff(Endpoint::S2, || {
             let id = paper_id.to_string();
             async move {
-                s2.get_citations(&id, limit).await.map_err(|e: S2CallError| {
-                    let is_retry = e.status.map(|s| s == 429 || s >= 500).unwrap_or(false);
-                    if is_retry {
-                        RetryAdvice::Retry { error: e.message, retry_after: e.retry_after }
-                    } else {
-                        RetryAdvice::Fatal(e.message)
-                    }
-                })
+                s2.get_citations(&id, limit).await.map_err(|e: S2CallError| e.into_retry_advice())
             }
         })
         .await;
@@ -316,14 +302,7 @@ async fn cached_get_references(
         .with_backoff(Endpoint::S2, || {
             let id = paper_id.to_string();
             async move {
-                s2.get_references(&id, limit).await.map_err(|e: S2CallError| {
-                    let is_retry = e.status.map(|s| s == 429 || s >= 500).unwrap_or(false);
-                    if is_retry {
-                        RetryAdvice::Retry { error: e.message, retry_after: e.retry_after }
-                    } else {
-                        RetryAdvice::Fatal(e.message)
-                    }
-                })
+                s2.get_references(&id, limit).await.map_err(|e: S2CallError| e.into_retry_advice())
             }
         })
         .await;
@@ -408,14 +387,7 @@ async fn cached_get_papers_batch(
         .with_backoff(Endpoint::S2, || {
             let ids = uncached_ids.clone();
             async move {
-                s2.get_papers_batch(&ids).await.map_err(|e: S2CallError| {
-                    let is_retry = e.status.map(|s| s == 429 || s >= 500).unwrap_or(false);
-                    if is_retry {
-                        RetryAdvice::Retry { error: e.message, retry_after: e.retry_after }
-                    } else {
-                        RetryAdvice::Fatal(e.message)
-                    }
-                })
+                s2.get_papers_batch(&ids).await.map_err(|e: S2CallError| e.into_retry_advice())
             }
         })
         .await;

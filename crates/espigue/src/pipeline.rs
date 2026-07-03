@@ -217,17 +217,24 @@ async fn decompose_seed_queries(
 ) -> Vec<String> {
     use base::identity::AgentId;
 
+    // Example-bleed guard (live probe 2026-07-02): the illustration below is
+    // deliberately from a field far from this tool's typical questions. A
+    // same-domain example (the old 'Byzantine fault tolerance' one) leaked
+    // into the generated queries and steered retrieval toward the example's
+    // topic instead of the question's.
     let prompt = format!(
         "Decompose this research question into short literature search queries for \
          Semantic Scholar / arXiv. Produce TWO kinds:\n\
          1. FACET queries (4 to 6): 2-6 word phrases covering the question's distinct \
          facets, in the question's own terminology.\n\
          2. FOUNDATIONAL queries (1 to 2): the classical or foundational work the \
-         subject is built on. Use the general, field-standard terminology and DROP \
-         the modern framing words — for a question about multi-agent LLMs, omit \
-         'LLM'/'agent' and name the underlying theory directly (e.g. 'Byzantine fault \
-         tolerance consensus', 'Condorcet jury theorem', 'ensemble voting methods'). \
-         These surface the foundational literature that the modern-framed queries miss.\n\
+         subject is built on. Use the general, field-standard terminology of the \
+         question's own field and DROP the modern framing words. Illustration from an \
+         unrelated field: for a question about mRNA vaccine thermostability, \
+         foundational queries would be 'lipid nanoparticle formulation' and 'RNA \
+         degradation kinetics'. Derive the actual terms from THIS question's field — \
+         never reuse the illustration's vocabulary. These surface the foundational \
+         literature that the modern-framed queries miss.\n\
          Output ONLY the queries, one per line — no numbering, no group labels, no \
          bullets, no commentary.\n\n\
          Research question: {question}"
@@ -319,20 +326,26 @@ async fn topicality_gate(
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Example-bleed guard (live probe 2026-07-02): illustration kept far from
+    // this tool's typical questions, with an explicit do-not-match-on-it
+    // instruction — a same-domain example biased the gate's keep decisions
+    // toward the example's topic.
     let prompt = format!(
         "You are screening retrieved papers for topical relevance to a research \
          question.\n\
          A paper is ON-TOPIC if it studies the question's actual subject. It is \
          ALSO on-topic if it supplies the FOUNDATIONAL theory the subject is built \
          on — even when it predates the question's modern framing or comes from the \
-         classical/adjacent field the subject inherits from (for a question about \
-         consensus in multi-agent LLM systems, a classical Byzantine-fault-tolerance \
-         or voting-theory paper IS on-topic foundational grounding, keep it).\n\
-         A paper is OFF-TOPIC only when it shares surface vocabulary but belongs to \
-         an unrelated APPLICATION domain — for example, for that same question, a \
-         multi-agent-debate paper about phishing detection, video forensics, urban \
-         prediction, or agriculture is OFF-TOPIC. When unsure between foundational \
-         grounding and wrong-domain, keep the paper.\n\n\
+         classical/adjacent field the subject inherits from.\n\
+         A paper is OFF-TOPIC only when it shares surface vocabulary with the \
+         question but belongs to an unrelated APPLICATION domain.\n\
+         Illustration from an unrelated field: for a question about mRNA vaccine \
+         thermostability, a classical lipid-chemistry paper on nanoparticle \
+         formulation IS on-topic foundational grounding (keep it), while a paper \
+         using the same stability vocabulary for canned-food shelf life is OFF-TOPIC \
+         (drop it). Judge THIS question's candidates by its own field — the \
+         illustration's vocabulary is irrelevant to your decision.\n\
+         When unsure between foundational grounding and wrong-domain, keep the paper.\n\n\
          Research question:\n{question}\n\n\
          Candidates:\n{listing}\n\n\
          List the indices of the ON-TOPIC papers only, comma-separated (for example \
@@ -550,22 +563,17 @@ async fn run_three_lane_fusion(
             if policy == RetrievalPolicy::LocalOnly {
                 (vec![], None)
             } else {
-                match gateway.acquire(search::Endpoint::S2).await {
-                    search::Acquire::Proceed => {
-                        run_s2_lane_for_synthesize(
-                            query,
-                            s2_client,
-                            Some(ctx.lit_pool.as_ref()),
-                            Some(lit_store.as_ref()),
-                            Some(embedder.as_ref()),
-                        )
-                        .await
-                    }
-                    search::Acquire::BudgetExhausted => (
-                        vec![],
-                        Some("S2 per-run call budget exhausted — lane degraded to local".into()),
-                    ),
-                }
+                // Acquire + backoff live inside the lane now — one paced
+                // token per attempt (budget exhaustion degrades in-lane).
+                run_s2_lane_for_synthesize(
+                    query,
+                    s2_client,
+                    Some(ctx.lit_pool.as_ref()),
+                    Some(lit_store.as_ref()),
+                    Some(embedder.as_ref()),
+                    gateway,
+                )
+                .await
             }
         },
         // ── Lit-corpus kNN lane ─────────────────────────────────────────────
@@ -998,15 +1006,31 @@ async fn run_arxiv_lane_for_synthesize(
         }
     };
 
-    if gateway.acquire(Endpoint::ArxivSearch).await == Acquire::BudgetExhausted {
-        return (
-            vec![],
-            Some("arxiv per-run call budget exhausted — lane degraded to local".into()),
-        );
-    }
-
+    // Live probes 2026-07-02/03: this call was single-shot — one transport
+    // blip degraded the arXiv lane for the whole run, twice in a row. Route
+    // it through the gateway's clawd-parity backoff. Each ATTEMPT re-acquires
+    // a paced token (1 req/3s courtesy rate) and consumes a budget slot, so
+    // retrying can never exceed the API rate — it only spends bounded budget
+    // on tail reliability.
     let search_start = std::time::Instant::now();
-    let arxiv_results = match client.search(query).await {
+    let search_result = gateway
+        .with_backoff(Endpoint::ArxivSearch, || async {
+            match gateway.acquire(Endpoint::ArxivSearch).await {
+                Acquire::BudgetExhausted => Err(search::RetryAdvice::Fatal(
+                    "arxiv per-run call budget exhausted — lane degraded to local".into(),
+                )),
+                Acquire::Proceed => client.search(query).await.map_err(|e| {
+                    let msg = e.to_string();
+                    if live_lane_error_is_transient(&msg) {
+                        search::RetryAdvice::Retry { error: msg, retry_after: None }
+                    } else {
+                        search::RetryAdvice::Fatal(msg)
+                    }
+                }),
+            }
+        })
+        .await;
+    let arxiv_results = match search_result {
         Ok(r) => r,
         Err(e) => {
             let r = format!("arxiv search failed: {e}");
@@ -1092,14 +1116,52 @@ async fn run_arxiv_lane_for_synthesize(
 }
 
 /// S2 lane — abstract-first, skip-if-ingested, canonical keying.
+/// Transient-vs-fatal classifier for live-lane search errors (arXiv Atom +
+/// S2 enrich), matched on the lanes' own error message formats.
+///
+/// Transient (retry, paced by the gateway): transport-level send/read
+/// failures — no HTTP exchange completed — plus HTTP 429 and 5xx, plus
+/// truncated-body decode failures. Fatal (surface immediately): everything
+/// else — 4xx bad-query/auth errors that retrying cannot help.
+fn live_lane_error_is_transient(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("send failed")
+        || m.contains("body read failed")
+        || m.contains("response unreadable")
+        || m.contains("decode failed")
+        || m.contains("http 429")
+        || m.contains("http 5")
+}
+
 async fn run_s2_lane_for_synthesize(
     query: &str,
     s2_client: &search::S2Client,
     lit_pool: Option<&sqlx::SqlitePool>,
     lit_store: Option<&search::SqliteVecStore>,
     embedder: Option<&dyn base::EmbeddingService>,
+    gateway: &Arc<search::LitGateway>,
 ) -> (Vec<search::S2Hit>, Option<String>) {
-    let s2_results = match s2_client.enrich(query).await {
+    // Same single-shot fix as the arXiv lane (run 1 died here on an S2 429
+    // that was never retried): backoff through the gateway, one paced token
+    // + budget slot per attempt — retries stay under the 1 req/s line.
+    let enrich_result = gateway
+        .with_backoff(search::Endpoint::S2, || async {
+            match gateway.acquire(search::Endpoint::S2).await {
+                search::Acquire::BudgetExhausted => Err(search::RetryAdvice::Fatal(
+                    "S2 per-run call budget exhausted — lane degraded to local".into(),
+                )),
+                search::Acquire::Proceed => s2_client.enrich(query).await.map_err(|e| {
+                    let msg = e.to_string();
+                    if live_lane_error_is_transient(&msg) {
+                        search::RetryAdvice::Retry { error: msg, retry_after: None }
+                    } else {
+                        search::RetryAdvice::Fatal(msg)
+                    }
+                }),
+            }
+        })
+        .await;
+    let s2_results = match enrich_result {
         Ok(r) => r,
         Err(e) => {
             let r = format!("S2 search failed: {e}");
@@ -1564,6 +1626,7 @@ pub async fn run_review(
         &question_id,
     )
     .with_run_id(run_id.clone())
+    .with_question(&trimmed)
     .with_stage_retrievers(live_retriever, local_retriever)
     .with_profile(profile)
     .with_panel_refresher(Arc::new(LitPanelRefresher {
@@ -1709,6 +1772,25 @@ pub async fn run_review(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Transient classifier matches the live lanes' own error formats:
+    /// transport send/read failures, 429, and 5xx retry; 4xx surface fatal.
+    #[test]
+    fn live_lane_transient_classifier() {
+        // Transient — the exact live-probe failure classes.
+        assert!(live_lane_error_is_transient(
+            "search error: arxiv send failed: error sending request for url (…)"
+        ));
+        assert!(live_lane_error_is_transient("search error: S2 send failed: connection reset"));
+        assert!(live_lane_error_is_transient("search error: S2 HTTP 429 Too Many Requests: {…}"));
+        assert!(live_lane_error_is_transient("search error: arxiv HTTP 503 Service Unavailable: …"));
+        assert!(live_lane_error_is_transient("arxiv Atom body read failed: timed out"));
+        assert!(live_lane_error_is_transient("S2 response decode failed: EOF while parsing"));
+        // Fatal — retrying cannot help.
+        assert!(!live_lane_error_is_transient("search error: arxiv HTTP 404: not found"));
+        assert!(!live_lane_error_is_transient("search error: S2 HTTP 403: auth failed"));
+        assert!(!live_lane_error_is_transient("arxiv search endpoint not found"));
+    }
 
     #[test]
     fn parse_keep_indices_handles_clean_and_prose_replies() {

@@ -164,4 +164,24 @@ pub trait AgentExecutor: Send + Sync {
     ) -> AlzinaResult<String> {
         self.execute(agent_id, instruction, model, task).await
     }
+
+    /// Variant that carries a real system message alongside the user prompt.
+    ///
+    /// Default impl concatenates system + user into one instruction and
+    /// delegates to [`execute`](AgentExecutor::execute) — backwards compatible
+    /// with every existing executor and test mock (same non-breaking pattern
+    /// as `execute_with_emitter` / `execute_with_sampling`). Chat-API backends
+    /// (OpenRouterExecutor) override this to send `system` in the system role,
+    /// where instruction-following weight is higher than in user text.
+    async fn execute_with_system(
+        &self,
+        agent_id: &AgentId,
+        system: &str,
+        instruction: &str,
+        model: &str,
+        task: &str,
+    ) -> AlzinaResult<String> {
+        let combined = format!("{system}\n\n{instruction}");
+        self.execute(agent_id, &combined, model, task).await
+    }
 }

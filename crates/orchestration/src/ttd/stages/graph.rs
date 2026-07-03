@@ -722,7 +722,12 @@ impl GapIdentify<ArgumentationGraph> for GraphGapIdentify {
             let graph_xml = draft.to_xml_string();
             crate::ttd::prompts::lit_review::render_gap_identify_v2(
                 &graph_xml,
-                "Identify gaps in the argumentation graph coverage",
+                if config.question.trim().is_empty() {
+                    "Identify gaps in the argumentation graph coverage"
+                } else {
+                    config.question.trim()
+                },
+                fitness_feedback.as_deref(),
             )
         } else {
             render_gap_identify(&GapIdentifyInput {
@@ -1254,12 +1259,19 @@ impl EvalFitness<ArgumentationGraph> for GraphEvalFitness {
                 use crate::ttd::term_sheet::V2_JUDGE_DIMS;
 
                 let mut scores: Vec<(String, Option<u8>)> = Vec::with_capacity(5);
+                let mut rationales: Vec<(String, String)> = Vec::with_capacity(5);
 
                 // WR-05: degrade a failed spawn to None, do NOT abort.
                 for dim in &V2_JUDGE_DIMS {
                     let prompt = render_fitness_judge_v2_graph(dim, draft);
                     let score = match executor.execute(&agent_id, &prompt, &self.model, dim.name).await {
-                        Ok(raw) => parse_fitness_score(&raw),
+                        Ok(raw) => {
+                            let parsed = crate::ttd::fitness::parse_fitness_response(&raw);
+                            if !parsed.rationale.trim().is_empty() {
+                                rationales.push((dim.name.to_string(), parsed.rationale));
+                            }
+                            parsed.score
+                        }
                         Err(e) => {
                             tracing::debug!(
                                 dimension = dim.name,
@@ -1276,7 +1288,7 @@ impl EvalFitness<ArgumentationGraph> for GraphEvalFitness {
                 // NOT via an LLM judge. Attached before returning (T-B3-01 closure).
                 // F13: pass panel_ids so the allowlist covers panel-member expert ids.
                 let veto = traceability_veto_graph(draft, &self.panel_ids);
-                let eval = FitnessEval::new(scores);
+                let eval = FitnessEval::new(scores).with_rationales(rationales);
                 Ok(if let Some(reason) = veto { eval.with_veto(reason) } else { eval })
             }
 

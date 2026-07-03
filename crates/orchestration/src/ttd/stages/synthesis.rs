@@ -97,7 +97,7 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
         &self,
         inputs: &[ExpertResponse],
         executor: &Arc<dyn AgentExecutor>,
-        _config: &TtdConfig,
+        config: &TtdConfig,
         persona_prompt: Option<&str>,
         sampling: Option<crate::executor::SamplingParams>,
     ) -> Result<SynthesisArtifact, TtdError> {
@@ -106,6 +106,11 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
             SynthesisDraftGraphInput, SynthesisDraftInput,
         };
         use base::identity::AgentId;
+
+        // The caller's research question, when supplied, fills the prompt's
+        // "## Research question" slot; empty keeps the pre-question
+        // placeholder (byte-stable for existing callers).
+        let question = config.question.trim();
 
         // use_graph_draft branch (synthesis_tasks.py:131-133):
         // Pick draft_graph when self._graph is not None.
@@ -119,8 +124,13 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
                         n_nodes = graph.nodes.len(),
                         "SynthesisDraftGen: v2 graph-based draft"
                     );
+                    let question = if question.is_empty() {
+                        format!("Synthesise the argumentation graph from {} papers", inputs.len())
+                    } else {
+                        question.to_string()
+                    };
                     crate::ttd::prompts::lit_review::render_synthesis_draft_graph_v2(
-                        &format!("Synthesise the argumentation graph from {} papers", inputs.len()),
+                        &question,
                         graph,
                         inputs,
                         "500-800",
@@ -128,7 +138,7 @@ impl DraftGen<SynthesisArtifact> for SynthesisDraftGen {
                 } else {
                     tracing::debug!("SynthesisDraftGen: v2 plain draft");
                     crate::ttd::prompts::lit_review::render_synthesis_draft_v2(
-                        "Synthesise the papers",
+                        if question.is_empty() { "Synthesise the papers" } else { question },
                         inputs,
                         "500-800",
                     )
@@ -311,10 +321,35 @@ impl GapIdentify<SynthesisArtifact> for SynthesisGapIdentify {
         let prompt = match self.profile {
             PromptProfile::V2LitReview | PromptProfile::V3LitReviewLong => {
                 // Serialize the synthesis to XML for the gap identify prompt context.
-                let synthesis_xml = format!("<synthesis><narrative>{}</narrative></synthesis>", draft.narrative);
+                // Claims are included with support level and sources — the prompt asks
+                // the model to name claims needing stronger support, which it cannot do
+                // from the narrative alone.
+                let claims_xml: String = draft
+                    .claims
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| {
+                        let support = c.support_level.as_deref().unwrap_or("unknown");
+                        let sources = c.sources.join(", ");
+                        format!(
+                            "<claim id=\"C{n}\" support_level=\"{support}\" sources=\"{sources}\">{text}</claim>",
+                            n = i + 1,
+                            text = c.text,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let synthesis_xml = format!(
+                    "<synthesis>\n<narrative>{}</narrative>\n<claims>\n{}\n</claims>\n</synthesis>",
+                    draft.narrative, claims_xml
+                );
                 crate::ttd::prompts::lit_review::render_synthesis_gap_identify_v2(
                     &synthesis_xml,
-                    "Identify coverage gaps",
+                    if config.question.trim().is_empty() {
+                        "Identify coverage gaps"
+                    } else {
+                        config.question.trim()
+                    },
                     fitness_feedback.as_deref(),
                 )
             }
@@ -755,7 +790,7 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
         &self,
         candidates: &[SynthesisArtifact],
         executor: &Arc<dyn AgentExecutor>,
-        _config: &TtdConfig,
+        config: &TtdConfig,
     ) -> Result<SynthesisArtifact, TtdError> {
         use crate::ttd::prompts::synthesis::{render_synthesis_merger, SynthesisMergerInput};
         use base::identity::AgentId;
@@ -767,7 +802,10 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
         // B2: fork prompt on profile — v2 uses lit_review::render_synthesis_merger_v2.
         // Decision 0: v3 = v2 (Stage-2 merger; the 500-800 target is the synthesis
         // narrative length, NOT the Stage-3 constraint — untouched by Phase 0).
-        let prompt = match self.profile {
+        // v2/v3 renders as a (system, user) pair: stable instructions ride the
+        // system channel where chat APIs weight them highest; executors without
+        // a system channel concatenate via the trait default.
+        let (system, prompt) = match self.profile {
             PromptProfile::V2LitReview | PromptProfile::V3LitReviewLong => {
                 let candidate_refs: Vec<&SynthesisArtifact> = candidates.iter().collect();
                 // F14 (option B): give the Opus merger the FULL graph's verified
@@ -816,24 +854,34 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                         "ttd_perf: F14 merger graph-evidence (option B — full graph to Opus)"
                     );
                 }
-                crate::ttd::prompts::lit_review::render_synthesis_merger_v2(
+                let (system, user) = crate::ttd::prompts::lit_review::render_synthesis_merger_v2_split(
                     &candidate_refs,
-                    "Merge synthesis candidates",
+                    if config.question.trim().is_empty() {
+                        "Merge synthesis candidates"
+                    } else {
+                        config.question.trim()
+                    },
                     "500-800",
                     &node_evidence,
                     &self.tier_map,
-                )
+                );
+                (Some(system), user)
             }
             PromptProfile::V1Delphi => {
-                render_synthesis_merger(&SynthesisMergerInput { candidates })
+                (None, render_synthesis_merger(&SynthesisMergerInput { candidates }))
             }
         };
         let agent_id = AgentId::new(self.agent_id.as_str());
 
-        let output = executor
-            .execute(&agent_id, &prompt, &self.model, "synthesis_merger")
-            .await
-            .map_err(|e| TtdError::SpawnFailed(e.to_string()))?;
+        let output = match system {
+            Some(sys) => {
+                executor
+                    .execute_with_system(&agent_id, &sys, &prompt, &self.model, "synthesis_merger")
+                    .await
+            }
+            None => executor.execute(&agent_id, &prompt, &self.model, "synthesis_merger").await,
+        }
+        .map_err(|e| TtdError::SpawnFailed(e.to_string()))?;
 
         parse_synthesis_xml(&output, &self.model, &self.prompt_version, self.profile)
     }
@@ -904,12 +952,19 @@ impl EvalFitness<SynthesisArtifact> for SynthesisEvalFitness {
                 use crate::ttd::term_sheet::V2_JUDGE_DIMS;
 
                 let mut scores: Vec<(String, Option<u8>)> = Vec::with_capacity(5);
+                let mut rationales: Vec<(String, String)> = Vec::with_capacity(5);
 
                 // WR-05: degrade a failed spawn to None, do NOT abort.
                 for dim in &V2_JUDGE_DIMS {
                     let prompt = render_fitness_judge_v2_synthesis(dim, draft);
                     let score = match executor.execute(&agent_id, &prompt, &self.model, dim.name).await {
-                        Ok(output) => parse_fitness_score(&output),
+                        Ok(output) => {
+                            let parsed = crate::ttd::fitness::parse_fitness_response(&output);
+                            if !parsed.rationale.trim().is_empty() {
+                                rationales.push((dim.name.to_string(), parsed.rationale));
+                            }
+                            parsed.score
+                        }
                         Err(e) => {
                             tracing::debug!(
                                 dimension = dim.name,
@@ -930,7 +985,7 @@ impl EvalFitness<SynthesisArtifact> for SynthesisEvalFitness {
                 // F13: pass panel_ids so the allowlist covers panel-member expert ids
                 // (shape lane handles non-panel arxiv:/s2: ids without panel data).
                 let veto = traceability_veto_synthesis(draft, &self.panel_ids);
-                let eval = FitnessEval::new(scores);
+                let eval = FitnessEval::new(scores).with_rationales(rationales);
                 Ok(if let Some(reason) = veto { eval.with_veto(reason) } else { eval })
             }
 

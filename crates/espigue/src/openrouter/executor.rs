@@ -61,9 +61,26 @@ impl OpenRouterExecutor {
         instruction: &str,
         sampling: Option<SamplingParams>,
     ) -> AlzinaResult<String> {
+        self.chat_with_system(model, None, instruction, sampling).await
+    }
+
+    async fn chat_with_system(
+        &self,
+        model: &str,
+        system: Option<&str>,
+        instruction: &str,
+        sampling: Option<SamplingParams>,
+    ) -> AlzinaResult<String> {
+        let messages = match system.filter(|s| !s.trim().is_empty()) {
+            Some(sys) => json!([
+                { "role": "system", "content": sys },
+                { "role": "user", "content": instruction },
+            ]),
+            None => json!([{ "role": "user", "content": instruction }]),
+        };
         let mut body = json!({
             "model": model,
-            "messages": [{ "role": "user", "content": instruction }],
+            "messages": messages,
         });
         if let Some(s) = sampling {
             body["temperature"] = json!(s.temperature);
@@ -132,6 +149,17 @@ impl AgentExecutor for OpenRouterExecutor {
         sampling: Option<SamplingParams>,
     ) -> AlzinaResult<String> {
         self.chat(model, instruction, sampling).await
+    }
+
+    async fn execute_with_system(
+        &self,
+        _agent_id: &AgentId,
+        system: &str,
+        instruction: &str,
+        model: &str,
+        _task: &str,
+    ) -> AlzinaResult<String> {
+        self.chat_with_system(model, Some(system), instruction, None).await
     }
 }
 
@@ -203,6 +231,31 @@ mod tests {
             .execute(&agent(), "the prompt", "anthropic/claude-opus-4", "synthesis_merger")
             .await
             .expect("execute succeeds");
+    }
+
+    #[tokio::test]
+    async fn execute_with_system_sends_system_role() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .and(body_partial_json(json!({
+                "messages": [
+                    { "role": "system", "content": "the instructions" },
+                    { "role": "user", "content": "the data" }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "choices": [{ "message": { "content": "ok" } }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let exec = OpenRouterExecutor::with_base_url("k", server.uri()).unwrap();
+        let _ = exec
+            .execute_with_system(&agent(), "the instructions", "the data", "m", "synthesis_merger")
+            .await
+            .expect("execute_with_system succeeds");
     }
 
     #[tokio::test]
