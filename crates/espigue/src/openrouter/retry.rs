@@ -50,6 +50,7 @@ impl RetryPolicy {
 }
 
 /// Terminal failure after retries are exhausted or a fatal status.
+#[derive(Debug)]
 pub(crate) enum PostFailure {
     /// Transport error (connect failure, or a post-send failure the policy
     /// does not retry).
@@ -206,6 +207,66 @@ mod tests {
         .await
         .expect_err("timeout must fail");
         assert!(matches!(err, PostFailure::Transport(_)));
+    }
+
+    #[tokio::test]
+    async fn backoff_branch_recovers_without_retry_after_header() {
+        let server = MockServer::start().await;
+        // 429 with NO Retry-After header → the jittered exponential-backoff
+        // branch (fast here because max_wait caps the jitter at 50ms).
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(429))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let resp = post_json_with_retry(
+            &reqwest::Client::new(),
+            &format!("{}/x", server.uri()),
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(false),
+        )
+        .await
+        .expect("must recover via the backoff branch");
+        assert!(resp.status().is_success());
+    }
+
+    #[tokio::test]
+    async fn connect_refused_retries_even_under_chat_policy() {
+        // Bind a port, then drop the listener: connection refused. A
+        // connect-phase failure never reached the server, so it retries even
+        // with retry_post_send=false. No server exists to count requests;
+        // the elapsed lower bound (two backoff waits) is the retry evidence.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/x", listener.local_addr().unwrap());
+        drop(listener);
+
+        let started = std::time::Instant::now();
+        let err = post_json_with_retry(
+            &reqwest::Client::new(),
+            &url,
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(false),
+        )
+        .await
+        .expect_err("no server must fail");
+        assert!(matches!(err, PostFailure::Transport(_)));
+        assert!(
+            started.elapsed() >= Duration::from_millis(20),
+            "expected at least two backoff waits (retries happened)"
+        );
     }
 
     #[tokio::test]
