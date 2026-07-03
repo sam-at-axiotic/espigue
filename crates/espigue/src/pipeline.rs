@@ -563,22 +563,17 @@ async fn run_three_lane_fusion(
             if policy == RetrievalPolicy::LocalOnly {
                 (vec![], None)
             } else {
-                match gateway.acquire(search::Endpoint::S2).await {
-                    search::Acquire::Proceed => {
-                        run_s2_lane_for_synthesize(
-                            query,
-                            s2_client,
-                            Some(ctx.lit_pool.as_ref()),
-                            Some(lit_store.as_ref()),
-                            Some(embedder.as_ref()),
-                        )
-                        .await
-                    }
-                    search::Acquire::BudgetExhausted => (
-                        vec![],
-                        Some("S2 per-run call budget exhausted — lane degraded to local".into()),
-                    ),
-                }
+                // Acquire + backoff live inside the lane now — one paced
+                // token per attempt (budget exhaustion degrades in-lane).
+                run_s2_lane_for_synthesize(
+                    query,
+                    s2_client,
+                    Some(ctx.lit_pool.as_ref()),
+                    Some(lit_store.as_ref()),
+                    Some(embedder.as_ref()),
+                    gateway,
+                )
+                .await
             }
         },
         // ── Lit-corpus kNN lane ─────────────────────────────────────────────
@@ -1011,15 +1006,31 @@ async fn run_arxiv_lane_for_synthesize(
         }
     };
 
-    if gateway.acquire(Endpoint::ArxivSearch).await == Acquire::BudgetExhausted {
-        return (
-            vec![],
-            Some("arxiv per-run call budget exhausted — lane degraded to local".into()),
-        );
-    }
-
+    // Live probes 2026-07-02/03: this call was single-shot — one transport
+    // blip degraded the arXiv lane for the whole run, twice in a row. Route
+    // it through the gateway's clawd-parity backoff. Each ATTEMPT re-acquires
+    // a paced token (1 req/3s courtesy rate) and consumes a budget slot, so
+    // retrying can never exceed the API rate — it only spends bounded budget
+    // on tail reliability.
     let search_start = std::time::Instant::now();
-    let arxiv_results = match client.search(query).await {
+    let search_result = gateway
+        .with_backoff(Endpoint::ArxivSearch, || async {
+            match gateway.acquire(Endpoint::ArxivSearch).await {
+                Acquire::BudgetExhausted => Err(search::RetryAdvice::Fatal(
+                    "arxiv per-run call budget exhausted — lane degraded to local".into(),
+                )),
+                Acquire::Proceed => client.search(query).await.map_err(|e| {
+                    let msg = e.to_string();
+                    if live_lane_error_is_transient(&msg) {
+                        search::RetryAdvice::Retry { error: msg, retry_after: None }
+                    } else {
+                        search::RetryAdvice::Fatal(msg)
+                    }
+                }),
+            }
+        })
+        .await;
+    let arxiv_results = match search_result {
         Ok(r) => r,
         Err(e) => {
             let r = format!("arxiv search failed: {e}");
@@ -1105,14 +1116,52 @@ async fn run_arxiv_lane_for_synthesize(
 }
 
 /// S2 lane — abstract-first, skip-if-ingested, canonical keying.
+/// Transient-vs-fatal classifier for live-lane search errors (arXiv Atom +
+/// S2 enrich), matched on the lanes' own error message formats.
+///
+/// Transient (retry, paced by the gateway): transport-level send/read
+/// failures — no HTTP exchange completed — plus HTTP 429 and 5xx, plus
+/// truncated-body decode failures. Fatal (surface immediately): everything
+/// else — 4xx bad-query/auth errors that retrying cannot help.
+fn live_lane_error_is_transient(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("send failed")
+        || m.contains("body read failed")
+        || m.contains("response unreadable")
+        || m.contains("decode failed")
+        || m.contains("http 429")
+        || m.contains("http 5")
+}
+
 async fn run_s2_lane_for_synthesize(
     query: &str,
     s2_client: &search::S2Client,
     lit_pool: Option<&sqlx::SqlitePool>,
     lit_store: Option<&search::SqliteVecStore>,
     embedder: Option<&dyn base::EmbeddingService>,
+    gateway: &Arc<search::LitGateway>,
 ) -> (Vec<search::S2Hit>, Option<String>) {
-    let s2_results = match s2_client.enrich(query).await {
+    // Same single-shot fix as the arXiv lane (run 1 died here on an S2 429
+    // that was never retried): backoff through the gateway, one paced token
+    // + budget slot per attempt — retries stay under the 1 req/s line.
+    let enrich_result = gateway
+        .with_backoff(search::Endpoint::S2, || async {
+            match gateway.acquire(search::Endpoint::S2).await {
+                search::Acquire::BudgetExhausted => Err(search::RetryAdvice::Fatal(
+                    "S2 per-run call budget exhausted — lane degraded to local".into(),
+                )),
+                search::Acquire::Proceed => s2_client.enrich(query).await.map_err(|e| {
+                    let msg = e.to_string();
+                    if live_lane_error_is_transient(&msg) {
+                        search::RetryAdvice::Retry { error: msg, retry_after: None }
+                    } else {
+                        search::RetryAdvice::Fatal(msg)
+                    }
+                }),
+            }
+        })
+        .await;
+    let s2_results = match enrich_result {
         Ok(r) => r,
         Err(e) => {
             let r = format!("S2 search failed: {e}");
@@ -1723,6 +1772,25 @@ pub async fn run_review(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Transient classifier matches the live lanes' own error formats:
+    /// transport send/read failures, 429, and 5xx retry; 4xx surface fatal.
+    #[test]
+    fn live_lane_transient_classifier() {
+        // Transient — the exact live-probe failure classes.
+        assert!(live_lane_error_is_transient(
+            "search error: arxiv send failed: error sending request for url (…)"
+        ));
+        assert!(live_lane_error_is_transient("search error: S2 send failed: connection reset"));
+        assert!(live_lane_error_is_transient("search error: S2 HTTP 429 Too Many Requests: {…}"));
+        assert!(live_lane_error_is_transient("search error: arxiv HTTP 503 Service Unavailable: …"));
+        assert!(live_lane_error_is_transient("arxiv Atom body read failed: timed out"));
+        assert!(live_lane_error_is_transient("S2 response decode failed: EOF while parsing"));
+        // Fatal — retrying cannot help.
+        assert!(!live_lane_error_is_transient("search error: arxiv HTTP 404: not found"));
+        assert!(!live_lane_error_is_transient("search error: S2 HTTP 403: auth failed"));
+        assert!(!live_lane_error_is_transient("arxiv search endpoint not found"));
+    }
 
     #[test]
     fn parse_keep_indices_handles_clean_and_prose_replies() {

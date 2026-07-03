@@ -410,6 +410,29 @@ pub struct S2CallError {
     pub message: String,
 }
 
+impl S2CallError {
+    /// Gateway retry classification for this error.
+    ///
+    /// Transient (retry, paced by the gateway): `status == None` — a
+    /// transport send failure or truncated-body decode, i.e. no complete
+    /// HTTP exchange (live probes 2026-07-02/03: exactly the failure class
+    /// that killed both A/B runs' live lanes, and the old classifiers
+    /// treated it as fatal) — plus 429 and 5xx, honouring Retry-After.
+    /// Fatal: any other HTTP status (4xx bad-query/auth — retrying cannot
+    /// help).
+    pub fn into_retry_advice(self) -> crate::lit_gateway::RetryAdvice {
+        let transient = self.status.map_or(true, |s| s == 429 || s >= 500);
+        if transient {
+            crate::lit_gateway::RetryAdvice::Retry {
+                error: self.message,
+                retry_after: self.retry_after,
+            }
+        } else {
+            crate::lit_gateway::RetryAdvice::Fatal(self.message)
+        }
+    }
+}
+
 // ── Resolve ID helper ──────────────────────────────────────────────────────
 
 /// Port of `SemanticScholarClient._resolve_id` (semantic_scholar.py:207-218).
@@ -789,6 +812,43 @@ mod tests {
     use serde_json::json;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    /// Retry classification: status None (transport/decode — no complete HTTP
+    /// exchange) and 429/5xx are transient; other statuses are fatal. The
+    /// None arm is the live-probe fix — both A/B runs died on send failures
+    /// the old classifiers treated as fatal.
+    #[test]
+    fn s2_call_error_retry_advice_classification() {
+        use crate::lit_gateway::RetryAdvice;
+
+        let transport = S2CallError {
+            status: None,
+            retry_after: None,
+            message: "S2 send failed: connection reset".into(),
+        };
+        assert!(matches!(transport.into_retry_advice(), RetryAdvice::Retry { .. }));
+
+        let rate_limited = S2CallError {
+            status: Some(429),
+            retry_after: Some(std::time::Duration::from_secs(7)),
+            message: "S2 HTTP 429".into(),
+        };
+        match rate_limited.into_retry_advice() {
+            RetryAdvice::Retry { retry_after, .. } => {
+                assert_eq!(retry_after, Some(std::time::Duration::from_secs(7)), "Retry-After honoured");
+            }
+            RetryAdvice::Fatal(m) => panic!("429 must be transient, got Fatal({m})"),
+        }
+
+        let server_err = S2CallError { status: Some(503), retry_after: None, message: "S2 HTTP 503".into() };
+        assert!(matches!(server_err.into_retry_advice(), RetryAdvice::Retry { .. }));
+
+        let not_found = S2CallError { status: Some(404), retry_after: None, message: "S2 HTTP 404".into() };
+        assert!(matches!(not_found.into_retry_advice(), RetryAdvice::Fatal(_)));
+
+        let auth = S2CallError { status: Some(403), retry_after: None, message: "S2 HTTP 403".into() };
+        assert!(matches!(auth.into_retry_advice(), RetryAdvice::Fatal(_)));
+    }
 
     fn cfg_for(server: &MockServer) -> S2Config {
         S2Config {
