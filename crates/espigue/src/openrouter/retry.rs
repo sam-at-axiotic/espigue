@@ -10,6 +10,13 @@
 //! still complete and bill server-side. [`RetryPolicy::retry_post_send`]
 //! decides whether such post-send transport failures retry; connect-phase
 //! failures always retry (the request never reached the server).
+//!
+//! Wall-clock note: retries stretch one call's worst case to roughly
+//! `max_attempts × client timeout` plus waits — about 15 minutes for chat
+//! (3 × 300s + backoff), more when the server sends Retry-After. The TTD
+//! stage guard (`max_stage_seconds`) is cooperative, checked between steps,
+//! so a stage can overshoot its budget by up to that much per in-flight
+//! call.
 
 use std::time::Duration;
 
