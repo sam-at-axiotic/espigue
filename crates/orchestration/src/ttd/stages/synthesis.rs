@@ -1557,6 +1557,9 @@ pub(crate) fn extract_xml_block(output: &str, tag: &str) -> Option<String> {
 /// T1 ruled contract: missing or empty `<gaps>` block → `Ok(vec![])` (never
 /// `Err`, never a bare `Vec`). A gap is valid iff it has a non-empty
 /// `<description>`; `<query>` defaults to the description when absent.
+///
+/// Canonical copy for all three stages — narrative.rs and graph.rs import it
+/// from here, so the parse behaviour cannot drift between stages.
 pub(crate) fn parse_gaps_xml(output: &str) -> Result<Vec<IdentifiedGap>, TtdError> {
     let xml_block = match extract_xml_block(output, "gaps") {
         Some(block) => block,
