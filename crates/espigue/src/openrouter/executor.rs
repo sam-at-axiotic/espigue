@@ -18,6 +18,7 @@ use base::AlzinaResult;
 use orchestration::{AgentExecutor, SamplingParams};
 
 use super::DEFAULT_BASE_URL;
+use super::retry::{PostFailure, post_json_with_retry};
 
 /// HTTP timeout. Synthesis stages can be slow on large prompts, so this is
 /// generous.
@@ -91,29 +92,16 @@ impl OpenRouterExecutor {
         }
 
         let url = format!("{}/chat/completions", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.api_key)
-            // OpenRouter attribution headers (optional but recommended).
-            .header("HTTP-Referer", "https://github.com/axiotic/espigue")
-            .header("X-Title", "espigue")
-            .json(&body)
-            .send()
+        let resp = post_json_with_retry(&self.client, &url, &self.api_key, &body, "chat")
             .await
-            .map_err(|e| {
-                tracing::warn!(error = %e, "OpenRouter chat request failed (network)");
-                AlzinaError::Orchestration(format!("OpenRouter chat request failed: {e}"))
+            .map_err(|f| match f {
+                PostFailure::Transport(e) => {
+                    AlzinaError::Orchestration(format!("OpenRouter chat request failed: {e}"))
+                }
+                PostFailure::Http { status, body } => {
+                    AlzinaError::Orchestration(format!("OpenRouter chat HTTP {status}: {body}"))
+                }
             })?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
-            tracing::warn!(status = %status, body = %text, "OpenRouter chat non-2xx response");
-            return Err(AlzinaError::Orchestration(format!(
-                "OpenRouter chat HTTP {status}: {text}"
-            )));
-        }
 
         let parsed: ChatCompletion = resp.json().await.map_err(|e| {
             AlzinaError::Orchestration(format!("OpenRouter chat response decode failed: {e}"))
@@ -287,11 +275,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn non_2xx_is_error() {
+    async fn persistent_429_errors_after_bounded_retries() {
         let server = MockServer::start().await;
+        // Retry-After 0 keeps the test fast while exercising the header path.
         Mock::given(method("POST"))
             .and(path("/chat/completions"))
-            .respond_with(ResponseTemplate::new(429).set_body_string("rate limited"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("retry-after", "0")
+                    .set_body_string("rate limited"),
+            )
+            .expect(3) // 1 initial + 2 retries, then give up
             .mount(&server)
             .await;
 
@@ -299,9 +293,89 @@ mod tests {
         let err = exec
             .execute(&agent(), "p", "m", "graph_draft")
             .await
-            .expect_err("429 must error");
+            .expect_err("persistent 429 must still error");
         match err {
             AlzinaError::Orchestration(m) => assert!(m.contains("429"), "got {m}"),
+            other => panic!("expected Orchestration error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn transient_429_recovers_on_retry() {
+        let server = MockServer::start().await;
+        // First request: 429. Mounted first and limited to one use, so the
+        // retry falls through to the 200 mock below.
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "0"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "choices": [{ "message": { "content": "recovered" } }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let exec = OpenRouterExecutor::with_base_url("k", server.uri()).unwrap();
+        let out = exec
+            .execute(&agent(), "p", "m", "graph_draft")
+            .await
+            .expect("one 429 then 200 must succeed");
+        assert_eq!(out, "recovered");
+    }
+
+    #[tokio::test]
+    async fn transient_503_recovers_on_retry() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(503).insert_header("retry-after", "0"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "choices": [{ "message": { "content": "recovered" } }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let exec = OpenRouterExecutor::with_base_url("k", server.uri()).unwrap();
+        let out = exec
+            .execute(&agent(), "p", "m", "graph_draft")
+            .await
+            .expect("one 503 then 200 must succeed");
+        assert_eq!(out, "recovered");
+    }
+
+    #[tokio::test]
+    async fn bad_request_is_not_retried() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .respond_with(ResponseTemplate::new(400).set_body_string("not a valid model ID"))
+            .expect(1) // fatal on first sight — retrying a 400 cannot succeed
+            .mount(&server)
+            .await;
+
+        let exec = OpenRouterExecutor::with_base_url("k", server.uri()).unwrap();
+        let err = exec
+            .execute(&agent(), "p", "m", "graph_draft")
+            .await
+            .expect_err("400 must error immediately");
+        match err {
+            AlzinaError::Orchestration(m) => {
+                assert!(m.contains("400"), "got {m}");
+                assert!(m.contains("not a valid model ID"), "got {m}");
+            }
             other => panic!("expected Orchestration error, got {other:?}"),
         }
     }
