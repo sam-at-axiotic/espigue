@@ -773,15 +773,40 @@ pub fn render_plan_draft(
 
     // Bookend + heading rules — only meaningful when a section skeleton exists
     // (SectionedLongForm). Empty under Concise, so that prompt is byte-identical.
+    //
+    // Item 7 (bench runs 1-5): the veto-tier lint rules were stated only inside
+    // an XML comment in the skeleton template, and 0/28 Haiku plans passed them
+    // across four runs (phantom T ids; ids spread over 3-4 sections). Hard
+    // validity rules are now prose, with THIS corpus's actual id ranges, and
+    // formatted from the same constants the lint enforces so the contract
+    // cannot drift from the check.
+    let n_claims = synthesis.claims.len();
+    let n_tensions = synthesis.areas_of_disagreement.len();
+    let tension_vocab = if n_tensions == 0 {
+        "no tensions exist in this corpus, so NO T id is valid".to_string()
+    } else {
+        format!("T1-T{n_tensions} (tensions)")
+    };
+    let min_covered = (n_claims as f32 * PLAN_CLAIM_COVERAGE_MIN).ceil() as usize;
     let skeleton_rules = match shape {
         NarrativeShape::SectionedLongForm => {
+            format!(
             "\n6. A section skeleton that bookends the argument (great-review structure — see docs/synthesis/literature-review-checklist.md):\n\
              - The FIRST section MUST be an Introduction that opens with the TENSION or obstacle that makes this review necessary — not the topic — motivates from the reader's world before the field, states the one focal question, declares the scope exclusions, and gives a map of the argument.\n\
              - The SECOND-TO-LAST section MUST be an \"Open questions and future directions\" section that converts the thin and unresolved literature into a research agenda — what the evidence cannot yet answer, and the concrete next steps.\n\
              - The LAST section MUST be a Conclusion that REPLAYS the organising framework and re-sorts the findings by it, renders a verdict (takes a position), and maps the gaps onto future work — a verdict of the framework, not a summary of sections.\n\
-             - Name every interior section for the substantive tension or idea it holds (e.g. \"External stores versus embedded memory operations\"). Do NOT use generic numbered labels like \"Problem 1\", \"Section 2\", or \"Part III\" — each heading must carry meaning on its own, so a reader could reconstruct the table of contents from the framing alone.\n"
+             - Name every interior section for the substantive tension or idea it holds (e.g. \"External stores versus embedded memory operations\"). Do NOT use generic numbered labels like \"Problem 1\", \"Section 2\", or \"Part III\" — each heading must carry meaning on its own, so a reader could reconstruct the table of contents from the framing alone.\n\
+             7. Hard validity rules for `<claim_ids>` — checked mechanically; ONE violation discards the whole plan:\n\
+             - The only valid ids for THIS corpus are C1-C{n_claims} (claims) and {tension_vocab}. \
+             Copy ids from the digest above; an id outside these ranges does not exist — never invent one. \
+             Planted-thread ids (PT1, PT2, …) are a separate namespace and never appear in `<claim_ids>`.\n\
+             - No id may appear in more than {max_sections} sections. Assign each claim where it does the most work, not everywhere it could fit.\n\
+             - At least {coverage_pct}% of claims ({min_covered} of {n_claims}) must be assigned to a section.\n",
+             max_sections = PLAN_MAX_SECTIONS_PER_ID,
+             coverage_pct = (PLAN_CLAIM_COVERAGE_MIN * 100.0) as usize,
+            )
         }
-        NarrativeShape::Concise => "",
+        NarrativeShape::Concise => String::new(),
     };
 
     format!(
@@ -822,7 +847,7 @@ Output EXACTLY this XML (element-only, no attributes):
   </term_registry>
   <planted_threads>
     <thread>
-      <id>T1</id>
+      <id>PT1</id>
       <description>what is set up and must be paid off</description>
       <marker>distinctive verbatim phrase</marker>
       <setup>setup section heading</setup>
@@ -1614,6 +1639,37 @@ mod tests {
             !concise.contains("Open questions and future directions"),
             "no open-questions mandate under Concise"
         );
+    }
+
+    /// Bench runs 1-5: 0/28 Haiku plans passed the veto lints while the rules
+    /// lived only in an XML comment. The draft prompt must state them as prose
+    /// with THIS corpus's actual id ranges, and the thread-id example must not
+    /// collide with the digest's tension namespace.
+    #[test]
+    fn plan_draft_prompt_states_lint_contract() {
+        let synthesis = sample_synthesis(5); // 5 claims, 1 tension
+        let long = render_plan_draft(&synthesis, NarrativeShape::SectionedLongForm, "");
+        assert!(long.contains("Hard validity rules"), "lint contract stated as prose");
+        assert!(long.contains("C1-C5"), "actual claim id range rendered");
+        assert!(long.contains("T1-T1"), "actual tension id range rendered");
+        assert!(long.contains("3 of 5"), "coverage floor rendered in claims (ceil(0.6*5))");
+        assert!(
+            long.contains("more than 2 sections"),
+            "assign-everything cap rendered from PLAN_MAX_SECTIONS_PER_ID"
+        );
+        assert!(long.contains("<id>PT1</id>"), "thread example id off the tension namespace");
+        assert!(!long.contains("<id>T1</id>"), "T1 thread example (tension collision) is gone");
+
+        // No tensions → the prompt says no T id is valid instead of "T1-T0".
+        let mut no_tension = sample_synthesis(5);
+        no_tension.areas_of_disagreement.clear();
+        let prompt = render_plan_draft(&no_tension, NarrativeShape::SectionedLongForm, "");
+        assert!(prompt.contains("NO T id is valid"));
+        assert!(!prompt.contains("T1-T0"));
+
+        // Concise has no sections, so no claim_ids rules (lint is inactive there).
+        let concise = render_plan_draft(&synthesis, NarrativeShape::Concise, "");
+        assert!(!concise.contains("Hard validity rules"));
     }
 
     // ── Tournament integration (mock executor) ────────────────────────────────
