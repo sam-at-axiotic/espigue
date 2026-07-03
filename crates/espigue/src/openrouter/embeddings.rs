@@ -22,7 +22,7 @@ use base::search::{EmbeddingService, EmbeddingTask};
 use base::AlzinaResult;
 
 use super::DEFAULT_BASE_URL;
-use super::retry::{PostFailure, post_json_with_retry};
+use super::retry::{PostFailure, RetryPolicy, post_json_with_retry};
 
 const HTTP_TIMEOUT_SECS: u64 = 120;
 /// Max inputs per request. OpenAI-compatible endpoints accept arrays; keep the
@@ -103,28 +103,33 @@ impl OpenRouterEmbeddingService {
                 "input": chunk,
                 "dimensions": self.dimensions,
             });
-            let resp = post_json_with_retry(&self.client, &url, &self.api_key, &body, "embeddings")
-                .await
-                .map_err(|f| match f {
-                    PostFailure::Transport(e) => degraded(
-                        format!("OpenRouter embeddings request failed: {e}"),
-                        format!("OpenRouter embeddings unavailable: {e}"),
-                    ),
-                    PostFailure::Http { status, body } => {
-                        let reason = match status.as_u16() {
-                            429 => "OpenRouter embeddings rate-limited (429)".to_string(),
-                            401 | 403 => {
-                                "OpenRouter embeddings auth failed (check OPENROUTER_API_KEY)"
-                                    .to_string()
-                            }
-                            _ => format!("OpenRouter embeddings returned {status}"),
-                        };
-                        degraded(
-                            format!("OpenRouter embeddings HTTP {status}: {body}"),
-                            reason,
-                        )
-                    }
-                })?;
+            let resp = post_json_with_retry(
+                &self.client,
+                &url,
+                &self.api_key,
+                &body,
+                "embeddings",
+                &RetryPolicy::embeddings(),
+            )
+            .await
+            .map_err(|f| match f {
+                PostFailure::Transport(e) => degraded(
+                    format!("OpenRouter embeddings request failed: {e}"),
+                    format!("OpenRouter embeddings unavailable: {e}"),
+                ),
+                PostFailure::Http { status, body } => {
+                    let reason = match status.as_u16() {
+                        429 => "OpenRouter embeddings rate-limited (429)".to_string(),
+                        401 | 403 => "OpenRouter embeddings auth failed (check OPENROUTER_API_KEY)"
+                            .to_string(),
+                        _ => format!("OpenRouter embeddings returned {status}"),
+                    };
+                    degraded(
+                        format!("OpenRouter embeddings HTTP {status}: {body}"),
+                        reason,
+                    )
+                }
+            })?;
 
             let parsed: EmbeddingResponse = resp.json().await.map_err(|e| {
                 degraded(

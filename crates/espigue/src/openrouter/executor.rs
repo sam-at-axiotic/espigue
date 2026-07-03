@@ -18,7 +18,7 @@ use base::AlzinaResult;
 use orchestration::{AgentExecutor, SamplingParams};
 
 use super::DEFAULT_BASE_URL;
-use super::retry::{PostFailure, post_json_with_retry};
+use super::retry::{PostFailure, RetryPolicy, post_json_with_retry};
 
 /// HTTP timeout. Synthesis stages can be slow on large prompts, so this is
 /// generous.
@@ -92,16 +92,23 @@ impl OpenRouterExecutor {
         }
 
         let url = format!("{}/chat/completions", self.base_url);
-        let resp = post_json_with_retry(&self.client, &url, &self.api_key, &body, "chat")
-            .await
-            .map_err(|f| match f {
-                PostFailure::Transport(e) => {
-                    AlzinaError::Orchestration(format!("OpenRouter chat request failed: {e}"))
-                }
-                PostFailure::Http { status, body } => {
-                    AlzinaError::Orchestration(format!("OpenRouter chat HTTP {status}: {body}"))
-                }
-            })?;
+        let resp = post_json_with_retry(
+            &self.client,
+            &url,
+            &self.api_key,
+            &body,
+            "chat",
+            &RetryPolicy::chat(),
+        )
+        .await
+        .map_err(|f| match f {
+            PostFailure::Transport(e) => {
+                AlzinaError::Orchestration(format!("OpenRouter chat request failed: {e}"))
+            }
+            PostFailure::Http { status, body } => {
+                AlzinaError::Orchestration(format!("OpenRouter chat HTTP {status}: {body}"))
+            }
+        })?;
 
         let parsed: ChatCompletion = resp.json().await.map_err(|e| {
             AlzinaError::Orchestration(format!("OpenRouter chat response decode failed: {e}"))

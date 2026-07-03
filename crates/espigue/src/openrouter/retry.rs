@@ -2,23 +2,57 @@
 //!
 //! Generation is the most expensive surface in a run: by the time Stage 3
 //! fires, retrieval and every earlier LLM call have already been paid for, so
-//! a single transient 429/5xx must not discard the run. Mirrors the
-//! `search::lit_gateway` retry semantics: bounded attempts, server
-//! `Retry-After` honoured, exponential backoff otherwise. Non-429 4xx (auth,
-//! bad request) surface immediately — retrying those cannot succeed.
+//! a single transient 429/5xx must not discard the run. Bounded attempts,
+//! server `Retry-After` honoured, exponential backoff otherwise. Non-429 4xx
+//! (auth, bad request) surface immediately — retrying those cannot succeed.
+//!
+//! Billing note: a non-streaming generation that times out client-side may
+//! still complete and bill server-side. [`RetryPolicy::retry_post_send`]
+//! decides whether such post-send transport failures retry; connect-phase
+//! failures always retry (the request never reached the server).
 
 use std::time::Duration;
 
-/// Total attempts per call (1 initial + 2 retries).
-const MAX_ATTEMPTS: u32 = 3;
-/// Base for exponential backoff when the server sends no Retry-After.
-const BACKOFF_BASE_SECS: u64 = 2;
-/// Cap on any single wait, including a server-provided Retry-After.
-const MAX_WAIT: Duration = Duration::from_secs(60);
+/// Per-caller retry policy for [`post_json_with_retry`].
+pub(crate) struct RetryPolicy {
+    /// Total attempts per call (1 initial + retries).
+    pub max_attempts: u32,
+    /// Base for exponential backoff when the server sends no Retry-After.
+    pub backoff_base: Duration,
+    /// Cap on any single wait, including a server-provided Retry-After.
+    pub max_wait: Duration,
+    /// Retry transport errors that may have fired AFTER the request reached
+    /// the server (e.g. a client timeout mid-response). Chat sets this false:
+    /// a 300s-timeout generation likely completed and billed server-side, so
+    /// retrying can pay for the same slow call up to three times. Embeddings
+    /// calls are cheap and fast, so they keep it true.
+    pub retry_post_send: bool,
+}
+
+impl RetryPolicy {
+    /// Policy for `POST /chat/completions` — post-send failures do not retry.
+    pub(crate) const fn chat() -> Self {
+        Self {
+            max_attempts: 3,
+            backoff_base: Duration::from_secs(2),
+            max_wait: Duration::from_secs(60),
+            retry_post_send: false,
+        }
+    }
+
+    /// Policy for `POST /embeddings` — cheap calls, post-send retries allowed.
+    pub(crate) const fn embeddings() -> Self {
+        Self {
+            retry_post_send: true,
+            ..Self::chat()
+        }
+    }
+}
 
 /// Terminal failure after retries are exhausted or a fatal status.
 pub(crate) enum PostFailure {
-    /// Transport error (the final attempt never got a response).
+    /// Transport error (connect failure, or a post-send failure the policy
+    /// does not retry).
     Transport(reqwest::Error),
     /// Final HTTP error status, with response body text.
     Http {
@@ -28,16 +62,18 @@ pub(crate) enum PostFailure {
 }
 
 /// POST `body` to `url` with OpenRouter auth + attribution headers, retrying
-/// transient failures. Returns the first 2xx response.
+/// transient failures per `policy`. Returns the first 2xx response.
 ///
-/// Transient = HTTP 429, any 5xx, or a transport error. Anything else is
-/// fatal on first sight. `what` labels log lines ("chat", "embeddings").
+/// Transient = HTTP 429, any 5xx, a connect-phase transport error, or (when
+/// `policy.retry_post_send`) any transport error. Anything else is fatal on
+/// first sight. `what` labels log lines ("chat", "embeddings").
 pub(crate) async fn post_json_with_retry(
     client: &reqwest::Client,
     url: &str,
     api_key: &str,
     body: &serde_json::Value,
     what: &str,
+    policy: &RetryPolicy,
 ) -> Result<reqwest::Response, PostFailure> {
     let mut attempt: u32 = 1;
     loop {
@@ -58,7 +94,7 @@ pub(crate) async fn post_json_with_retry(
                 let status = resp.status();
                 let transient = status.as_u16() == 429 || status.is_server_error();
                 wait_hint = parse_retry_after(&resp);
-                if !transient || attempt >= MAX_ATTEMPTS {
+                if !transient || attempt >= policy.max_attempts {
                     let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
                     tracing::warn!(
                         status = %status,
@@ -75,17 +111,22 @@ pub(crate) async fn post_json_with_retry(
                 tracing::warn!(status = %status, attempt, what, "OpenRouter transient HTTP failure; retrying");
             }
             Err(e) => {
-                if attempt >= MAX_ATTEMPTS {
-                    tracing::warn!(error = %e, attempt, what, "OpenRouter request failed (network, terminal)");
+                // Connect-phase failures never reached the server and are
+                // always safe to retry; anything later is policy-gated
+                // because the server may have processed (and billed) the
+                // request.
+                let retryable = e.is_connect() || policy.retry_post_send;
+                if !retryable || attempt >= policy.max_attempts {
+                    tracing::warn!(error = %e, attempt, what, "OpenRouter request failed (transport, terminal)");
                     return Err(PostFailure::Transport(e));
                 }
-                tracing::warn!(error = %e, attempt, what, "OpenRouter request failed (network); retrying");
+                tracing::warn!(error = %e, attempt, what, "OpenRouter request failed (transport); retrying");
             }
         }
 
         let wait = wait_hint
-            .unwrap_or_else(|| Duration::from_secs(BACKOFF_BASE_SECS.pow(attempt)))
-            .min(MAX_WAIT);
+            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1))
+            .min(policy.max_wait);
         tokio::time::sleep(wait).await;
         attempt += 1;
     }
@@ -102,4 +143,76 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<Duration> {
         .parse::<u64>()
         .ok()
         .map(Duration::from_secs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn fast_policy(retry_post_send: bool) -> RetryPolicy {
+        RetryPolicy {
+            max_attempts: 3,
+            backoff_base: Duration::from_millis(10),
+            max_wait: Duration::from_millis(50),
+            retry_post_send,
+        }
+    }
+
+    fn short_timeout_client() -> reqwest::Client {
+        reqwest::Client::builder()
+            .timeout(Duration::from_millis(100))
+            .build()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn post_send_timeout_is_not_retried_when_policy_forbids() {
+        let server = MockServer::start().await;
+        // The server accepts the request, then stalls past the client
+        // timeout — a post-send failure that may already be billed.
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(500)))
+            .expect(1) // chat policy: exactly one attempt
+            .mount(&server)
+            .await;
+
+        let err = post_json_with_retry(
+            &short_timeout_client(),
+            &format!("{}/x", server.uri()),
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(false),
+        )
+        .await
+        .expect_err("timeout must fail");
+        assert!(matches!(err, PostFailure::Transport(_)));
+    }
+
+    #[tokio::test]
+    async fn post_send_timeout_retries_when_policy_allows() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(500)))
+            .expect(3) // embeddings policy: all attempts spent
+            .mount(&server)
+            .await;
+
+        let err = post_json_with_retry(
+            &short_timeout_client(),
+            &format!("{}/x", server.uri()),
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(true),
+        )
+        .await
+        .expect_err("persistent timeout must still fail");
+        assert!(matches!(err, PostFailure::Transport(_)));
+    }
 }
