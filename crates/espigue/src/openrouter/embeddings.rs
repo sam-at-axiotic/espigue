@@ -25,6 +25,9 @@ use super::DEFAULT_BASE_URL;
 use super::retry::{PostFailure, RetryPolicy, post_json_with_retry};
 
 const HTTP_TIMEOUT_SECS: u64 = 120;
+/// Connect-phase timeout — fail fast as a retryable connect error instead of
+/// burning the total timeout on a blackholed connect (see executor.rs).
+const CONNECT_TIMEOUT_SECS: u64 = 15;
 /// Max inputs per request. OpenAI-compatible endpoints accept arrays; keep the
 /// batch bounded (mirrors the Jina client).
 const MAX_BATCH_SIZE: usize = 128;
@@ -85,6 +88,7 @@ impl OpenRouterEmbeddingService {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
             .build()
             .map_err(|e| degraded(format!("reqwest client build: {e}"), format!("{e}")))?;
         Ok(Self { client, api_key, model, dimensions, base_url })

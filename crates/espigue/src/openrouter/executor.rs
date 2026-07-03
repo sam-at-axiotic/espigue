@@ -23,6 +23,11 @@ use super::retry::{PostFailure, RetryPolicy, post_json_with_retry};
 /// HTTP timeout. Synthesis stages can be slow on large prompts, so this is
 /// generous.
 const HTTP_TIMEOUT_SECS: u64 = 300;
+/// Connect-phase timeout. Without it, a SYN blackhole burns the full total
+/// timeout and then reads as a post-send failure — non-retryable for chat —
+/// even though the request never reached the server. A connect timeout
+/// fails fast as a connect error, which always retries.
+const CONNECT_TIMEOUT_SECS: u64 = 15;
 
 /// OpenRouter chat-completions executor.
 pub struct OpenRouterExecutor {
@@ -51,6 +56,7 @@ impl OpenRouterExecutor {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
             .build()
             .map_err(|e| AlzinaError::Orchestration(format!("reqwest client build: {e}")))?;
         Ok(Self { client, api_key, base_url })
