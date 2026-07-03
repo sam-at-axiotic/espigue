@@ -853,6 +853,52 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                         draft_cited_node_refs = cited_node_refs,
                         "ttd_perf: F14 merger graph-evidence (option B — full graph to Opus)"
                     );
+                    // Source-breadth at merger entry (bench 2026-07: run 3 merged
+                    // down to 6 distinct sources / 0 multi-source claims). These
+                    // counters say whether breadth was already gone in the drafts
+                    // or was lost in the merge — compare against the same counts
+                    // on the merged output.
+                    let distinct_sources = |c: &SynthesisArtifact| -> usize {
+                        c.claims
+                            .iter()
+                            .flat_map(|cl| cl.sources.iter())
+                            .collect::<std::collections::HashSet<_>>()
+                            .len()
+                    };
+                    let multi_source_claims = |c: &SynthesisArtifact| -> usize {
+                        c.claims.iter().filter(|cl| cl.sources.len() >= 2).count()
+                    };
+                    let per_candidate_distinct: Vec<usize> =
+                        candidates.iter().map(distinct_sources).collect();
+                    let per_candidate_multi: Vec<usize> =
+                        candidates.iter().map(multi_source_claims).collect();
+                    let union_distinct = candidates
+                        .iter()
+                        .flat_map(|c| c.claims.iter())
+                        .flat_map(|cl| cl.sources.iter())
+                        .collect::<std::collections::HashSet<_>>()
+                        .len();
+                    let graph_quote_sources = match self.graph.as_ref() {
+                        Some(g) => g
+                            .nodes
+                            .iter()
+                            .filter(|n| {
+                                n.verification_status.as_deref() == Some("verified")
+                                    && n.quote.as_deref().map_or(false, |q| !q.trim().is_empty())
+                            })
+                            .map(|n| n.expert_id.as_str())
+                            .collect::<std::collections::HashSet<_>>()
+                            .len(),
+                        None => 0,
+                    };
+                    tracing::info!(
+                        target: "ttd_perf",
+                        per_candidate_distinct_sources = ?per_candidate_distinct,
+                        per_candidate_multi_source_claims = ?per_candidate_multi,
+                        union_distinct_sources = union_distinct,
+                        graph_quote_sources,
+                        "ttd_perf: merger-entry source breadth"
+                    );
                 }
                 let (system, user) = crate::ttd::prompts::lit_review::render_synthesis_merger_v2_split(
                     &candidate_refs,
