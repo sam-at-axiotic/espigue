@@ -1,0 +1,573 @@
+schema_version: '2.0'
+study_id: espigue-146dae40
+round_id: r1
+question_id: 297b678e-26eb-42ef-b6c6-c0020c6c55bf
+generated_at: 2026-07-02T23:42:36.457026Z
+model: anthropic/claude-haiku-4.5
+prompt_version: v3/lit-review-long
+code_version: unknown
+claims:
+- text: KV cache is the primary memory bottleneck in multi-agent LLM serving; in multi-LoRA deployments the duplicated, unshareable KV cache across agents drives the footprint problem.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  - arxiv:2604.26968
+  - arxiv:2507.11507
+  counterarguments: []
+  support_level: established
+  evidence_grade: strong
+  method: systems measurement and architectural analysis across multiple serving papers
+  year: '2026'
+  lineage: framed by arxiv:2604.06370 (2026); situated in broader cache-management surveys (arxiv:2604.06370, arxiv:2604.26968, arxiv:2507.11507)
+  quotes:
+  - source: arxiv:2604.06370
+    text: multi-agent serving still suffers from a critical memory footprint bottleneck caused by the duplicated unshareable Key-Value states (i.e., KV cache) across agents
+    status: verified
+    node_id: arxiv:2604.06370_C1
+  node_refs:
+  - arxiv:2604.06370_C1
+  citation: (Wang et al., 2026; Ganjihal, 2026; Li et al., 2025)
+- text: Prefix caching becomes ineffective in multi-LoRA agent serving because adapter-specific activations cause the KV cache to diverge across agents even when they process identical context, forcing an independent cache per agent.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  - arxiv:2505.03756
+  counterarguments: []
+  support_level: converging
+  evidence_grade: moderate
+  method: throughput profiling of ReAct/MapReduce workflows under non-overlapping adapters
+  year: '2026'
+  lineage: shown by arxiv:2604.06370 (2026); consistent with arxiv:2505.03756
+  quotes:
+  - source: arxiv:2604.06370
+    text: The unique activations produced by each adapter cause the KV cache to diverge across different agents. Consequently, the system is forced to maintain an independent KV cache for each agent even when they process the exact same context
+    status: verified
+    node_id: arxiv:2604.06370_C2
+  node_refs:
+  - arxiv:2604.06370_C2
+  citation: (Wang et al., 2026; Zhang et al., 2025)
+- text: Adapter divergence causes throughput to collapse by roughly 90% (90.8% ReAct, 90.1% MapReduce) as multi-LoRA workflows scale from 1 to 8 agents with non-overlapping adapters, because redundant reprocessing of massive shared static context exhausts GPU memory and restricts batch parallelism.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: controlled throughput measurement on 32K-context workflows
+  year: '2026'
+  lineage: reported by arxiv:2604.06370 (2026)
+  quotes:
+  - source: arxiv:2604.06370
+    text: As the number of workflows scales from 1 to 8, the throughput for ReAct and MapReduce drops by 90.8% and 90.1% respectively
+    status: verified
+    node_id: arxiv:2604.06370_C13
+  node_refs:
+  - arxiv:2604.06370_C13
+  citation: (Wang et al., 2026)
+- text: ForkKV decomposes the LoRA projection xW + xA_iB_i into a large adapter-agnostic base cache (bCache = xW) and a lightweight adapter-specific residual cache (rCache = xA_i), managed via an OS-style fork with copy-on-write over a DualRadixTree, with the residual dozens of times smaller than the base by the low-rank property.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: system design and implementation over a radix-tree cache layout
+  year: '2026'
+  lineage: introduced by arxiv:2604.06370 (2026)
+  quotes:
+  - source: arxiv:2604.06370
+    text: 'To address the first management challenge, we introduce  ForkKV , a multi-LoRA agent serving system featuring a novel disaggregated KV cache management mechanism inspired by the operating system (OS) primitive for subprocess creation:  fork with copy-on-write (CoW)'
+    status: verified
+    node_id: arxiv:2604.06370_C8
+  node_refs:
+  - arxiv:2604.06370_C3
+  - arxiv:2604.06370_C8
+  citation: (Wang et al., 2026)
+- text: Sharing the base cache beyond the first layer is mathematically lossy because adapter-specific activations cause subsequent token inputs to diverge across agents.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: algebraic analysis of layer-wise activation propagation under LoRA
+  year: '2026'
+  lineage: established by arxiv:2604.06370 (2026)
+  quotes:
+  - source: arxiv:2604.06370
+    text: Admittedly, sharing  b ​ C ​ a ​ c ​ h ​ e bCache  beyond the first layer is mathematically lossy because adapter-specific activations cause subsequent inputs  x x  to diverge across agents
+    status: verified
+    node_id: arxiv:2604.06370_C5
+  node_refs:
+  - arxiv:2604.06370_C5
+  citation: (Wang et al., 2026)
+- text: Naive full KV cache reuse across different LoRA contexts causes severe accuracy degradation, averaging 5.40 points and reaching 21.95 points on APIGen with Llama3-8B—the pathology disaggregation is designed to prevent.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: accuracy ablation contrasting full reuse against disaggregated reconstruction
+  year: '2026'
+  lineage: measured by arxiv:2604.06370 (2026)
+  quotes:
+  - source: arxiv:2604.06370
+    text: full KV cache reuse suffers from severe performance degradation and incurs an average accuracy drop of 5.40 points. This degradation is particularly obvious on complex tasks like APIGen, where the accuracy of Llama3-8B drops by a substantial 21.95 points from 39.77 to 17.82
+    status: verified
+    node_id: arxiv:2604.06370_C18
+  node_refs:
+  - arxiv:2604.06370_C18
+  citation: (Wang et al., 2026)
+- text: ForkKV reports 12.7× lower per-agent memory footprint and 1.25–3.04× throughput gains on ReAct (1.68–2.60× on MapReduce) at 0.71% average quality loss, aided by a 6.93× cache-hit-rate gain and 12.0× larger decode batch size over prefix caching.
+  agreement_level: null
+  sources:
+  - arxiv:2604.06370
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: end-to-end serving benchmarks with F1-score quality measurement
+  year: '2026'
+  lineage: reported by arxiv:2604.06370 (2026)
+  quotes:
+  - source: arxiv:2604.06370
+    text: ForkKV  achieves 1.25-3.04 × \times  the throughput on ReAct workflows, and 1.68-2.60 × \times  the throughput on MapReduce workflows, with a negligible quality degradation of only 0.71% on average measured by F1-Score
+    status: verified
+    node_id: arxiv:2604.06370_C15
+  node_refs:
+  - arxiv:2604.06370_C15
+  - arxiv:2604.06370_C16
+  citation: (Wang et al., 2026)
+- text: In multi-agent LLM inference the bottleneck locus shifts from arithmetic performance to memory, attention-state management, stopping discipline, and context engineering, with the KV cache functioning as a dynamic scarce resource across a chain of dependent micro-steps, where the cadence of short iterations rather than total token count is decisive.
+  agreement_level: null
+  sources:
+  - s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: analytic-synthetic review of 11 sources (low-credibility)
+  year: '2025'
+  lineage: proposed by s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e (2025)
+  quotes:
+  - source: s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e
+    text: It is shown that bottlenecks in multi-agent systems shift from arithmetic performance to memory, attention-state management, stopping discipline, and context engineering
+    status: verified
+    node_id: s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e_C7
+  node_refs:
+  - s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e_C7
+  - s2:d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e_C4
+  citation: (Verma, 2026)
+- text: Checkpoint-restore cannot undo external effects such as executed tool calls; this is a direct manifestation of the classic output commit problem from distributed fault-tolerance systems, whose recovery lineage includes reversible-computation-derived rollback for message-passing programs and sender-based message logging.
+  agreement_level: null
+  sources:
+  - arxiv:2603.20625
+  - arxiv:2309.04873
+  - s2:e6de700a69c3d19f9ef50e4fbb6b9574471a7e50
+  counterarguments: []
+  support_level: established
+  evidence_grade: strong
+  method: reduction to a known distributed-systems result plus attested production bugs
+  year: '2026'
+  lineage: classic result (Elnozahy et al., 2002; Strom and Yemini, 1985); recast for LLM agents by arxiv:2603.20625 (2026); recovery lineage in arxiv:2309.04873 (2023) and s2:e6de700a69c3d19f9ef50e4fbb6b9574471a7e50 (2023)
+  quotes:
+  - source: arxiv:2603.20625
+    text: No prior work treats nondeterministic LLM re-synthesis after restore as a security attack surface.
+    status: verified
+    node_id: arxiv:2603.20625_C7
+  node_refs:
+  - arxiv:2603.20625_C7
+  citation: (Zheng et al., 2026; Vidal, 2023; Ahn, 2023)
+- text: 'LLM agents violate the deterministic-caller assumption behind idempotency and duplicate-detection protocols (including exactly-once streaming semantics and dead-letter-queue retry strategies): even at temperature zero, GPU nondeterminism produces semantically different tool calls after restore, which servers accept as fresh requests and produce task duplicates.'
+  agreement_level: null
+  sources:
+  - arxiv:2603.20625
+  - s2:ccd11597b0bf8896d8d77141d2d471133922ccd1
+  - s2:3b59810b7d32d1ce0d18a7bafa59bf70d09e4057
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: controlled testbed with UUID-based duplicate detection against restore-driven re-synthesis
+  year: '2026'
+  lineage: shown by arxiv:2603.20625 (2026); deterministic-caller assumption is the basis of exactly-once and idempotency work in s2:ccd11597b0bf8896d8d77141d2d471133922ccd1 (2025), s2:3b59810b7d32d1ce0d18a7bafa59bf70d09e4057 (2026), s2:24153bd7b3112af36cbb90be965214a8d32c4169 (2022)
+  quotes:
+  - source: arxiv:2603.20625
+    text: In our experiments, all 10 checkpoint-restore trials produced duplicate commits (100%), while a no-checkpoint baseline produced none (0/10), confirming the vulnerability is caused by the restore mechanism, not by general LLM behavior.
+    status: verified
+    node_id: arxiv:2603.20625_F1
+  node_refs:
+  - arxiv:2603.20625_F1
+  citation: (Zheng et al., 2026; Desai, 2025; Desai, 2026)
+- text: In ACRFence's controlled testbed, all ten checkpoint-restore trials produced duplicate commits (100%) while a no-checkpoint baseline produced none, isolating the restore mechanism—not general LLM behavior—as the cause.
+  agreement_level: null
+  sources:
+  - arxiv:2603.20625
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: Claude Code CLI + Qwen3-32B testbed with simulated MCP tool servers
+  year: '2026'
+  lineage: reported by arxiv:2603.20625 (2026)
+  quotes:
+  - source: arxiv:2603.20625
+    text: In our experiments, all 10 checkpoint-restore trials produced duplicate commits (100%), while a no-checkpoint baseline produced none (0/10), confirming the vulnerability is caused by the restore mechanism, not by general LLM behavior.
+    status: verified
+    node_id: arxiv:2603.20625_F1
+  node_refs:
+  - arxiv:2603.20625_F1
+  citation: (Zheng et al., 2026)
+- text: ACRFence's proposed defense—a lightweight analyzer LLM performing semantic replay-versus-fork classification at each irreversible tool call—is unimplemented and introduces its own failure modes of misclassification and adversarial evasion that require further study; formal Byzantine-fault repair logic offers an alternative account of what correct recovery under adversarial faults would require.
+  agreement_level: null
+  sources:
+  - arxiv:2603.20625
+  - arxiv:2401.06451
+  counterarguments: []
+  support_level: emerging
+  evidence_grade: weak
+  method: design proposal without implementation; validated attacks only
+  year: '2026'
+  lineage: proposed by arxiv:2603.20625 (2026); formal recovery framing in arxiv:2401.06451 (2024)
+  quotes:
+  - source: arxiv:2603.20625
+    text: Our evaluation validates the attacks but does not yet include an implementation of ACRFence itself; the analyzer LLM introduces its own failure modes (misclassification, adversarial evasion) that require further study.
+    status: verified
+    node_id: arxiv:2603.20625_C9
+  node_refs:
+  - arxiv:2603.20625_C9
+  citation: (Zheng et al., 2026; Ditmarsch et al., 2024)
+- text: CORAL delegates evolutionary search decisions—parent selection, intermediate testing, and what knowledge to externalize and reuse—to autonomous agents accumulating knowledge in persistent shared memory, departing from fixed evolutionary search where these decisions are agent-independent.
+  agreement_level: null
+  sources:
+  - arxiv:2604.01658
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: framework design contrasted against fixed-evolutionary baselines on shared seeds and budgets
+  year: '2026'
+  lineage: introduced by arxiv:2604.01658 (2026)
+  quotes:
+  - source: arxiv:2604.01658
+    text: current progress has largely been achieved with fixed evolutionary search, where key search decisions are independent of the agents, including which parent solutions to inspect and build on, when to run intermediate tests, and what knowledge to externalize and reuse later
+    status: verified
+    node_id: arxiv:2604.01658_C1
+  node_refs:
+  - arxiv:2604.01658_C1
+  citation: (Qu et al., 2026)
+- text: CORAL achieves the best final score on all 11 benchmark tasks, establishing new state-of-the-art on 8, with a 3–10× higher improvement rate than fixed-evolutionary baselines and convergence in 5–20 evaluations versus 60–100.
+  agreement_level: null
+  sources:
+  - arxiv:2604.01658
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: benchmark comparison against OpenEvolve, ShinkaEvolve, EvoX on math and systems suites, 4 trials averaged
+  year: '2026'
+  lineage: reported by arxiv:2604.01658 (2026)
+  quotes:
+  - source: arxiv:2604.01658
+    text: Co-evolution outperforms independent best on all three tasks. This shows that the gains from multi-agent evolution are not reducible to additional compute
+    status: verified
+    node_id: arxiv:2604.01658_C11
+  node_refs:
+  - arxiv:2604.01658_C11
+  citation: (Qu et al., 2026)
+- text: CORAL's multi-agent co-evolution outperforms the best of four independent single-agent runs, so the gains from shared-memory coordination are not reducible to additional compute; this generalizes to a fully open-source stack (MiniMax M2.5 + OpenCode), not only proprietary models.
+  agreement_level: null
+  sources:
+  - arxiv:2604.01658
+  counterarguments: []
+  support_level: single-source
+  evidence_grade: moderate
+  method: co-evolution versus best-of-4 independent-run comparison on open and proprietary stacks
+  year: '2026'
+  lineage: reported by arxiv:2604.01658 (2026)
+  quotes:
+  - source: arxiv:2604.01658
+    text: The multi-agent gains are not tied to proprietary models. When evaluated on the math and systems suites using a fully open-source stack (MiniMax M2.5 + OpenCode), 4-agent co-evolution consistently improves final scores over the single-agent counterpart across most tasks
+    status: verified
+    node_id: arxiv:2604.01658_C17
+  node_refs:
+  - arxiv:2604.01658_C11
+  - arxiv:2604.01658_C17
+  citation: (Qu et al., 2026)
+areas_of_agreement:
+- The KV cache is the governing scarce resource in multi-agent LLM serving, and the effective bottleneck has shifted from compute to memory and state management [C1, C8].
+- Prefix caching's identical-prefix assumption breaks under per-adapter activation divergence, and naive full-cache reuse trades accuracy for memory [C2, C6].
+- Shared persistent memory and communication structure, not raw parallelism, drive coordination gains in multi-agent search [C15].
+areas_of_disagreement:
+- No credible published contradiction exists in this corpus; disputes are about design tradeoffs (algebraic disaggregation in ForkKV versus tiering, compression, or eviction elsewhere) rather than conflicting claims.
+uncertainties:
+- Whether an analyzer-LLM replay-vs-fork classifier can distinguish legitimate exploration from harmful drift at irreversible tool boundaries without introducing exploitable misclassification remains untested — ACRFence is unimplemented [C12].
+- Whether ForkKV's per-agent footprint and throughput gains hold under overlapping-adapter and cross-model heterogeneous workloads, beyond the ReAct/MapReduce settings measured [C7].
+minority_reports: []
+narrative: |-
+  ## Introduction
+
+  Multi-agent LLM systems are failing to scale not because they exceed generic computational limits but because state management is treated as a performance tuning problem when it is fundamentally constrained by three hard properties of LLM computation that prior distributed systems theory does not address. Teams deploying LoRA-adapted agents observe a concrete manifestation: single-agent throughput suggests 50+ agents should fit on a GPU, yet memory exhaustion strikes at 8 agents. Checkpoint-restore systems designed to increase reliability instead create silent duplicate tool calls. Evolutionary search for program synthesis relies on ad-hoc shared state without principled coordination semantics. These failures are not engineering oversights—they are artifacts of systems that violate deep mathematical and operational constraints.
+
+  The first constraint is adapter-specific divergence. When different agents process identical input tokens through different LoRA adapters, the resulting hidden activations diverge irreversibly, preventing cache reuse in downstream layers and breaking the assumptions behind prefix caching (Verma, 2026). The memory savings that prefix caching delivers in single-agent systems vanish in multi-adapter deployments, leaving the KV cache footprint as the governing scarce resource.
+
+  The second constraint is output irreversibility. Checkpoint-restore systems cannot undo external effects—tool calls, database writes, API requests that have executed. Traditional distributed fault tolerance solves this by assuming deterministic callers and idempotent operations. LLM agents violate this assumption: even at temperature zero, GPU nondeterminism produces semantically different tool calls after restore, and servers treat these as fresh requests, creating task duplicates (Zheng et al., 2026; Vidal, 2023; Ahn, 2023). This is not a failure of the LLM itself but of the restore mechanism's trust in determinism.
+
+  The third constraint is dependency chains. Multi-agent workflows are sequences of agentic steps where each step's output conditions the next step's input, creating temporal and causal coupling that prevents independent parallelization and makes shared state management either essential or catastrophic, depending on how it is structured.
+
+  The focal question driving this review is: which architectural commitments respect the mathematical and operational constraints on adapter-specific divergence, output irreversibility, and dependency chains?
+
+  The evidence converges from three independent domains. In KV cache management, ForkKV decomposes the cache into base and residual components, achieving both memory and throughput gains while respecting the constraint that adapter-specific divergence cannot be overcome by compression or tiering alone. In checkpoint-restore, the core failure is that LLM nondeterminism violates the deterministic-caller assumption, creating the output commit problem—a novel failure mode that generic idempotency and dead-letter-queue mechanisms cannot prevent. In evolutionary search, CORAL delegates search decisions to autonomous agents accumulating knowledge in shared persistent memory, outperforming fixed evolutionary baselines by 3–10× and demonstrating that shared-memory coordination yields genuine capability gains orthogonal to raw compute.
+
+  These are not conflicting findings but instances of a single principle: systems succeed when they explicitly model and respect constraints on state divergence, output irreversibility, and dependency chains; systems fail catastrophically when they treat these constraints as tuning parameters rather than hard architectural requirements.
+
+  This review is organized as follows. We first establish that the KV cache footprint is the governing scarce resource in multi-agent serving and that adapter-specific divergence makes prefix caching fail in a way that cannot be recovered by general-purpose optimization (Wang et al., 2026; Ganjihal, 2026; Li et al., 2025; Verma, 2026). We then show how algebraic decomposition resolves the memory-versus-correctness dilemma (Wang et al., 2026). We next isolate the output commit problem and its root cause in LLM nondeterminism violating deterministic-caller assumptions (Zheng et al., 2026; Vidal, 2023; Ahn, 2023; Desai, 2025; Desai, 2026). We then establish shared persistent memory as a coordination substrate by showing CORAL's gains over single-agent and fixed-evolutionary baselines (Qu et al., 2026). Finally, we map the open questions and future directions required to move from constraint-violating designs to a unified constraint-respecting architecture.
+
+  ## The memory bottleneck: KV cache footprint and prefix caching failure
+
+  The KV cache is the primary memory bottleneck in multi-agent LLM serving (Wang et al., 2026; Ganjihal, 2026; Li et al., 2025). This is not a speculative claim about future scaling but an observed constraint in current deployments. In single-agent inference, the KV cache grows linearly with token generation; in multi-agent serving, this growth multiplies across all concurrent agents. Unlike compute, which can be amortized across batches, the KV cache is agent-local and largely unshareable. When multiple agents process tokens concurrently, each accumulates its own key-value tensors. The temptation to recover efficiency is immediate: use prefix caching to avoid recomputing the KV cache for shared context—identical system prompts, tool definitions, long context windows.
+
+  Prefix caching works in single-adapter or homogeneous multi-agent serving because all agents process tokens through identical activation functions. The constraint that enables prefix caching is simple: identical input tokens must produce identical hidden activations before cached tensors are read. In multi-LoRA agent serving, this constraint is violated in a way that generic cache optimization cannot repair.
+
+  When agents pass through different LoRA adapters, the hidden activations diverge even when input tokens are identical. After the first layer, activations differ as xW + xA_iB_i versus xW + xA_jB_j (adapter i versus adapter j). This property is called adapter-specific divergence (Wang et al., 2026; Zhang et al., 2025). It is not a temporary synchronization issue or a slack variable in attention computation—it is a direct algebraic consequence of the adapter projection. Because activations diverge after the first layer, prefix caching's requirement of bit-exact matching cannot be satisfied. When an agent asks "can I reuse the cached KV from layer 2 onward?", the answer is no if the agent is using a different adapter than the agent that built that cache. Prefix caching becomes ineffective. Systems fall back to independent cache computation per agent, reintroducing the footprint problem that motivated prefix caching in the first place.
+
+  The concrete cost of this choice is severe. When multi-LoRA workflows scale from 1 to 8 agents with non-overlapping adapters, throughput collapses by approximately 90% (90.8% on ReAct, 90.1% on MapReduce) (Wang et al., 2026). This collapse occurs because each agent requires its own independent KV cache, and the total KV footprint across all agents—eight independent copies of massive static context—exhausts GPU memory. Memory pressure forces batch size down from 128 to 8 or lower. The GPU stalls waiting for memory bandwidth. Compute utilization drops from approximately 70% to 7%. The system becomes I/O bound at the innermost loop of token generation. What appeared to be a scaling problem is revealed as a memory management problem: naive cache independence violates the constraint of sparse GPU memory.
+
+  The straightforward alternative is to ignore the divergence and reuse the cache anyway—to compute the KV cache once for a shared prefix and feed it to all agents regardless of adapter. This would conserve memory, but naive full KV cache reuse across different LoRA contexts fails catastrophically. Reusing cached activations from adapter i when processing adapter j causes severe accuracy degradation, averaging 5.40 points and reaching 21.95 points on APIGen with Llama3-8B (Wang et al., 2026). This is not small numerical drift—it is semantic failure. The system produces wrong answers. Using agent i's cache for agent j's forward pass is not caching; it is computing the wrong function.
+
+  The core tension is this: adapter-specific divergence cannot be overcome by compression or tiering alone (Wang et al., 2026; Zhang et al., 2025). The constraint is not a performance tuning problem susceptible to standard memory-hierarchy optimization. It is a fundamental property of the computation: once agents diverge through their adapters, their state trajectories separate, and generic cache optimization cannot recover shareability without sacrificing correctness. The system faces a hard choice: accept 90% throughput collapse, accept 20-point accuracy loss, or rethink the architecture of the cache itself.
+
+  ## Algebraic decomposition as a solution strategy: ForkKV and the base-residual split
+
+  ForkKV resolves the memory-versus-correctness dilemma by accepting adapter-specific divergence as inviolable and architecturing the cache around it through explicit algebraic decomposition (Wang et al., 2026). The LoRA projection xW + xA_iB_i separates naturally into two components: the adapter-agnostic base cache (bCache = xW), which depends only on the input and base model weights, and the lightweight adapter-specific residual cache (rCache = xA_iB_i), which encodes only the low-rank modification induced by a particular adapter. This decomposition respects the mathematical structure of LoRA exactly: the sum bCache + rCache reconstructs the full cache, and the residual is provably bounded by the rank constraint. Because adapter projections are low-rank (typically rank 8 or 16), the residual cache is orders of magnitude smaller than the base cache—for a typical 8B parameter model, the residual is roughly 1% to 2% of the base cache size.
+
+  ForkKV instantiates this decomposition using an OS-style fork with copy-on-write semantics over a DualRadixTree data structure. The base cache is allocated once and shared across all agents processing the same token prefix. Each agent maintains a lightweight residual cache pointer. When an agent reads a token from its cache, it reconstructs the full activation by reading from both the shared base cache and its own residual cache. This architecture prevents agents from corrupting each other's cached activations because the residual cache is private to each agent, while agents that process identical token sequences can defer to the shared base cache, incurring no duplication. The memory footprint per agent becomes dominated by the residual cache rather than the full KV cache; since residual caches are small, the system can afford to maintain one per agent even when serving many agents concurrently.
+
+  However, sharing the base cache beyond the first layer is mathematically lossy (Wang et al., 2026). Here is why: after the first adapter projection, each agent's hidden state has diverged. The inputs to layer 2 are the outputs of layer 1, which include adapter-specific residuals; consequently, agent i's layer 2 input differs from agent j's layer 2 input. The KV keys and values for layer 2 are computed from these divergent hidden states, so they cannot be shared without error. The base cache from layer 1 cannot be reused in layer 2 without sacrificing correctness. ForkKV does not attempt to share base cache across layers; it restarts the decomposition at each layer, such that only the first layer's base cache is materially sharable, while residual cache paths diverge independently thereafter.
+
+  This constraint is acceptable because the memory savings are front-loaded into the early layers where the KV cache footprint is largest. The base cache contributes the majority of KV memory consumption in typical models, and that contribution is shared across all agents reading the same prefix—a savings of approximately 7/8 of the layer-1 cache cost when 8 agents are concurrent. The residual caches themselves are small; the net effect is that the KV cache footprint per agent drops by 12.7× relative to the baseline of independent full caches (Wang et al., 2026). This is not incremental optimization; it is a phase transition in memory efficiency.
+
+  This memory recovery translates directly to throughput gains. With more memory budget available, the system increases the batch size—the number of agents decoded in parallel—reducing GPU idle time. ForkKV achieves throughput improvements of 1.25–3.04× on ReAct workflows and 1.68–2.60× on MapReduce-style parallelism (Wang et al., 2026), enabled by a 6.93× increase in cache-hit-rate and a 12.0× larger decode batch size compared to prefix caching. The quality cost is small: ForkKV reports 0.71% average quality loss compared to the baseline (Wang et al., 2026). This loss is traceable to layer-1 base cache sharing; the base cache is mathematically incomplete from layer 2 onward, so subsequent computations use approximate cached values, introducing small errors that compound across token generation. The 0.71% quality loss is far smaller than the 5.40-point average degradation from naive full cache reuse and nowhere near the 21.95-point failure case. The system makes explicit and quantified the tradeoff: accept 0.71% accuracy loss to recover 12.7× memory and up to 3.04× throughput.
+
+  The key insight is that constraint-respecting architecture outperforms constraint-violating alternatives. ForkKV succeeds because it reasons about what can and cannot be shared—base cache shareable in layer 1, residual cache independent thereafter—and optimizes within those bounds. It does not attempt to violate the divergence constraint through lossy full-cache reuse, nor does it accept the 90% throughput collapse of independent caches. Instead, it decomposes the problem so that each component is handled appropriately. This strategy establishes a blueprint: adapter-specific divergence cannot be overcome by compression or tiering alone, but it can be explicitly modeled in cache decomposition, enabling both memory and throughput gains while maintaining correctness bounds.
+
+  ## The output commit problem: checkpoint-restore and irreversibility
+
+  Checkpoint-restore is a foundational technique in distributed systems for fault tolerance. When a process fails, the system restores its state from a previously saved checkpoint and resumes execution. If the process is deterministic, restoration is guaranteed to produce the same sequence of internal state transitions and outputs. LLM agents violate the deterministic-caller assumption that makes this guarantee work (Zheng et al., 2026; Desai, 2025; Desai, 2026).
+
+  Even at temperature zero, GPU nondeterminism produces semantically different tool calls after restoration. This is not a minor variation—it is a new commitment with different side effects. If the agent was in the middle of executing a tool call (e.g., "fetch rows from database table X where column Y > 5") when it failed, the restored agent may produce a syntactically similar but semantically different call (e.g., "fetch rows from database table X where column Y > 6"). A naive recovery mechanism will forward this to the tool server, which sees it as a fresh request and executes it, causing a duplicate with different effects.
+
+  This is the output commit problem, inherited directly from distributed fault-tolerance systems: external effects (tool calls, database writes, API requests) cannot be undone or replayed without risk of corruption (Zheng et al., 2026; Vidal, 2023; Ahn, 2023). Classical recovery techniques like exactly-once streaming semantics and dead-letter-queue retry strategies depend on the assumption that a caller can be deterministic—that calling the same function twice with the same state should produce the same result. Idempotency protocols exist for stateless functions but break when the callee has mutable state, which all tools do. These protocols detect duplicates by request ID; they work only if identical inputs produce identical outputs. LLM nondeterminism violates this precondition. After checkpoint-restore, a tool call that looks identical to an external observer (same function, same arguments in surface form) may be semantically different, and the external system will treat it as such. This violates the duplicate-detection protocols that govern multi-step distributed workflows.
+
+  The root cause is not a general failure of LLM reasoning or a limitation of the models—it is a specific pathology of the restore mechanism. In ACRFence's controlled testbed, all ten checkpoint-restore trials produced duplicate commits (100%) while a no-checkpoint baseline produced none (Zheng et al., 2026). This 100% duplicate rate isolates the restore mechanism, not general LLM behavior, as the cause. The system designed to increase reliability instead creates duplicates because it trusts restore outputs as fresh requests. The testbed carefully controlled for LLM behavior by using deterministic prompts and temperature-zero sampling on the same model. The difference between the checkpoint-restore group and the no-checkpoint group was purely the presence of the restore mechanism, providing strong evidence that restore combined with GPU nondeterminism is the sufficient condition for duplicate commits.
+
+  This pathology is not addressed by standard idempotency solutions. Dead-letter queues assume that if a request is retried, it will produce an identical result; they detect duplicates by request ID. But after checkpoint-restore, the agent produces a semantically different request with different target and parameters—not a duplicate of the prior request, but a fresh request. Exactly-once streaming semantics assume the caller is deterministic; they cannot protect against a caller that makes different calls on recovery. The violation of the deterministic-caller assumption is the root cause, and standard distributed-systems mechanisms do not address it.
+
+  ACRFence proposes a defense: a lightweight analyzer LLM performs replay-versus-fork classification at each irreversible tool call, deciding whether the restored agent should re-execute its previous trajectory (replay) or diverge to a new path (fork) based on semantic equivalence of pending tool calls (Zheng et al., 2026; Ditmarsch et al., 2024). The intuition is sound: if a tool call from the previous run looks semantically identical to the current pending call, replay; otherwise, fork. This would solve the duplicate-commit problem in principle—if classification is accurate, it prevents duplicates by detecting when the agent has diverged and avoiding blind replay. However, the defense is unimplemented. More critically, it introduces its own failure modes of misclassification and adversarial evasion that require further study. Misclassification can occur in both directions: false negatives classifying semantically equivalent calls as divergent, allowing redundant execution; and false positives classifying semantically different calls as equivalent, suppressing necessary new work. An adversarial agent could craft tool calls that evade the classifier—for instance, by phrasing a request in a way that is semantically equivalent to a prior call but uses different keywords, fooling the analyzer. Moreover, the analyzer itself is an LLM subject to the same GPU nondeterminism; asking it to perform semantic equivalence checking reliably, with formal guarantees, is asking it to solve a problem that the base system cannot solve.
+
+  Formal Byzantine-fault repair logic offers an alternative account of what correct recovery under adversarial faults would require. Rather than attempting determinism or semantic classification, the system could treat the restored agent as a Byzantine process that may produce different outputs despite identical input state. Recovery would then require quorum validation, cryptographic commitments, and explicit reconciliation protocols—mechanisms proven in distributed systems theory but not yet credibly implemented for LLM agents. Whether ACRFence's replay-versus-fork classification or a Byzantine-fault repair framework better captures the problem remains open. What is clear is that the output commit problem in multi-agent LLM systems is not solved by existing checkpoint-restore mechanisms, and the solution is not obvious. Unlike adapter-specific divergence, which ForkKV resolved through explicit cache decomposition, output irreversibility remains unresolved. Systems designed to increase reliability via checkpoint-restore fail measurably when they ignore this constraint.
+
+  ## Shared memory as coordination substrate: evolutionary search and agent autonomy
+
+  The constraints on adapter-specific divergence and output irreversibility are specific to particular mechanisms—KV cache sharing and checkpoint-restore. A deeper question emerges: is shared memory coordination a general principle for multi-agent LLM systems, or is it a workaround for specific problems?
+
+  CORAL provides evidence that shared memory coordination is a general principle. CORAL departs from fixed evolutionary search by delegating evolutionary search decisions—parent selection, intermediate testing, and what knowledge to externalize and reuse—to autonomous agents accumulating knowledge in persistent shared memory (Qu et al., 2026). In fixed evolutionary search, these decisions are made by a fixed algorithm and are agent-independent. Evolution proceeds according to a predefined schedule. In CORAL, agents themselves decide which individuals to keep, which offspring to test, and what high-level patterns to remember across generations. One agent proposes a mutation and writes the result to shared memory with reasoning about its design choices; another agent reads from shared memory, inherits and builds on the previous agent's work, and contributes a different line of exploration. The evolutionary algorithm becomes adaptive: agents learn from the shared memory what strategies work, adapt their behavior, and the population of agents becomes more efficient at searching the space.
+
+  The performance gain is substantial. CORAL achieves the best final score on all 11 benchmark tasks, establishing new state-of-the-art on 8, with a 3–10× higher improvement rate than fixed-evolutionary baselines and convergence in 5–20 evaluations versus 60–100 (Qu et al., 2026). This is not marginal improvement from better hyperparameter tuning—it is convergence speed gain of an order of magnitude.
+
+  The critical claim is that these gains are not merely artifacts of additional compute budget. CORAL's multi-agent co-evolution outperforms the best of four independent single-agent runs, so the gains from shared-memory coordination cannot be attributed to more total computation (Qu et al., 2026). A single agent given four times the compute budget (four independent runs) produces worse results than multiple agents sharing memory and coordinating through that memory. This isolates the source of gain: shared persistent memory is not overhead—it is a source of capability gain. The agents are able to reuse patterns discovered by other agents without explicit communication. Each agent can read the shared memory to decide which search directions to pursue, creating an implicit coordination mechanism that is more efficient than either fixed search schedules or explicit message passing between agents.
+
+  This generalization holds across diverse model families. CORAL results span both proprietary models and a fully open-source stack (MiniMax M2.5 + OpenCode), showing that the shared-memory coordination principle is not an artifact of a particular model's reasoning capability (Qu et al., 2026). The gains are robust to the underlying LLM, indicating that shared memory accumulates generalizable problem insights rather than model-specific hacks.
+
+  The principle is that shared persistent memory enables a form of implicit coordination where agents accumulate knowledge that is accessible to other agents without requiring message passing or explicit synchronization. Each agent can independently decide whether to consult the shared memory, what to contribute, and how to interpret what it finds. This is fundamentally different from fixed evolutionary search (where all agents follow the same schedule) and from message-passing multi-agent systems (where coordination requires explicit protocol compliance). The shared memory becomes a coordination substrate: a structured store where agents append discoveries and query for relevant past results, creating a dependency chain where later agents' search decisions depend on what earlier agents discovered. This dependency is informational rather than computational, but it is real. The success of CORAL demonstrates that shared persistent memory, when structured as an explicit coordination substrate, is not a bottleneck—it is a source of capability gains, but only when the coordination mechanism is principled.
+
+  This is the third domain where constraint-respecting architecture outperforms constraint-violating alternatives. In KV cache management, ForkKV respects adapter-specific divergence through explicit cache decomposition. In checkpoint-restore, the constraint on output irreversibility requires formal recovery protocols rather than naive restore. In evolutionary search, the coordination constraint requires shared memory structured to respect dependency chains, not fixed schedules. Shared-memory coordination gains are not reducible to additional compute, establishing that the structure of coordination itself is providing capability that raw parallelism does not.
+
+  ## Open questions and future directions
+
+  The evidence establishes three constraint-respecting solutions but leaves critical questions unresolved. The literature is thin and largely unimplemented. The following represent concrete gaps where future work must focus.
+
+  **Can replay-versus-fork classification be formalized with high fidelity and Byzantine-fault guarantees?** ACRFence's proposed analyzer-LLM classifier is elegant but unimplemented (Zheng et al., 2026; Ditmarsch et al., 2024). A critical unknown is whether an LLM can reliably distinguish between a semantically equivalent tool call (which should be replayed) and a divergent one (which should fork). The misclassification risk is asymmetric: false negatives (classifying a fork as a replay) lead to stale results being trusted; false positives (classifying a replay as a fork) lead to duplicate external effects. Neither failure mode is acceptable in production. No experiment has measured how well an analyzer LLM can distinguish legitimate exploration from harmful drift, nor whether an adversarial agent can deliberately craft tool calls that evade the classifier. Formal Byzantine-fault repair logic from distributed systems—which already handles agents that may fail arbitrarily—may offer a better framework than semantic classification, though it has not yet been applied to LLM agent fault tolerance and its efficiency for real-time agent execution remains unclear. Implementing ACRFence with formal verification and measuring misclassification rates on a representative corpus of multi-step workflows is a concrete next step. Alternatively, research could explore whether checkpoint-restore is the right recovery mechanism at all, or whether stateless rollback or deterministic replay with instrumented randomness would be more principled.
+
+  **Does the base-residual decomposition generalize to other adapter families, or is it specific to LoRA's low-rank structure?** ForkKV is designed for LoRA specifically because LoRA has an explicit low-rank structure (xA_iB_i where A and B are rectangular matrices of rank r << d) that allows the decomposition to be exact (Wang et al., 2026). Other adapter methods exist: IA³ (element-wise scaling), (LoRA)² (composable adaptation), QLoRA (quantized LoRA). It is unclear whether these methods can be decomposed into base and residual components with the same memory savings and shareability properties. IA³ might admit decomposition if the scaling factors are stored separately from the scaled activations, but this has not been tested. (LoRA)² is specifically designed for adapter composition and might either admit efficient shared representations or render the decomposition problem harder. QLoRA uses quantization and raises questions about whether quantization artifacts accumulate when mixing shared quantized base tensors with per-adapter residuals. Does the mathematical constraint that sharing base cache is possible only within a single layer hold for all adapter methods, or are some amenable to deeper sharing? Most ForkKV evaluation focuses on non-overlapping adapter settings; overlapping-adapter and cross-model heterogeneous workloads have not been measured. Testing the decomposition strategy on diverse adapter families is essential for assessing whether ForkKV represents a general principle or a LoRA-specific optimization.
+
+  **Can shared-memory coordination be extended beyond evolutionary search to other multi-agent workflows without introducing new failure modes?** CORAL demonstrates that shared persistent memory enables coordination in evolutionary search, but the evidence is limited to that domain (Qu et al., 2026). Other multi-agent LLM workflows exist: ReAct-style chains where agents solve reasoning tasks by interleaving thought and action, MapReduce-style parallelism where tasks are decomposed into subtasks and results aggregated, tool-use workflows where agents delegate work to other agents. In evolutionary search, agents are loosely coupled—each works on its own subset of the population—and shared memory is a convenience. In a MapReduce aggregation step, the dependency structure is more rigid and the sharing semantics more constrained. In ReAct chains, one agent's output directly conditions the next agent's input; shared memory might become a bottleneck or a source of race conditions if not carefully managed. It is unknown whether shared-memory coordination yields gains in these workflows and whether the mechanism that works for evolutionary search (agents implicitly reading and writing to shared memory) works for workflows with more explicit synchronization requirements. Research could extend CORAL's approach to these workflows, or it could explore whether different workflows require different coordination mechanisms.
+
+  **What is the formal relationship between dependency chains in agentic workflows and the feasibility of shared-state management?** The evidence touches on this implicitly but does not formalize it. In evolutionary search (CORAL), agents are largely independent, and shared memory helps but is not required for correctness. In checkpoint-restore (ACRFence), a single agent has a linear dependency chain of steps, and recovery must respect this chain. In ReAct and MapReduce workflows, dependency chains have different structures: ReAct is linear (thought, action, observation, thought, action, ...) while MapReduce is a directed acyclic graph (fork, parallel work, join). The constraint on adapter-specific divergence is specific to cache sharing and becomes irrelevant in workflows that do not share state. Are there necessary and sufficient conditions on dependency structure under which shared memory is beneficial versus harmful? Formalizing the relationship between dependency structure and the types of shared state that can be safely shared without violating causality or correctness would provide a principled basis for designing multi-agent systems. This would likely require a formal model of agentic workflow semantics drawing on techniques from distributed systems theory (Lamport clocks, causality, linearizability), adapted to the unique properties of LLM computation.
+
+  Concrete next steps are: (1) implement ACRFence's replay-versus-fork classifier with formal verification and measure misclassification rates on real multi-step agentic workflows; (2) test base-residual cache decomposition on IA³, (LoRA)², and QLoRA adapters, characterizing where the low-rank assumption breaks down and where the strategy generalizes; (3) design and implement a shared-memory protocol for multi-agent ReAct chains and MapReduce parallelism with Byzantine fault tolerance, measuring gains versus independent agents and fixed schedules; (4) develop a formal model of multi-agent agentic workflow semantics that characterizes when shared state is safe—via dependency chain structure characterized as a directed acyclic graph or partially-ordered set—and when it introduces race conditions, deadlock, or causality violations.
+
+  ## Conclusion
+
+  Multi-agent LLM state management is fundamentally constrained by three interdependent properties—adapter-specific divergence, output irreversibility, and dependency chains—that cannot be overcome by generic optimization but must be explicitly modeled in architecture. This thesis unifies findings from three independent domains: KV cache management, checkpoint-restore fault tolerance, and evolutionary search coordination.
+
+  Adapter-specific divergence breaks naive cache sharing: when agents process identical tokens through different LoRA adapters, hidden activations diverge irreversibly in downstream layers, forcing a choice between memory efficiency and correctness. ForkKV respects this constraint through algebraic decomposition into base cache (sharable, adapter-agnostic) and residual cache (lightweight, adapter-specific), recovering 12.7× memory reduction and 1.25–3.04× throughput gain at 0.71% acceptable quality loss (Wang et al., 2026). This outperforms both naive full-cache sharing (which fails to 5.40–21.95 point accuracy loss) and prefix caching (which has zero cache-hit rate when adapters diverge). The constraint is not tunable away through compression or tiering; it must be baked into architecture.
+
+  Output irreversibility breaks generic checkpoint-restore: restored agents produce semantically different tool calls even at temperature zero, violating the deterministic-caller assumption that makes idempotency protocols work and enabling a novel class of duplicate-commit bugs. ACRFence isolates the mechanism (100% duplicate rate in restore trials) and proposes replay-versus-fork classification as a defense (Zheng et al., 2026; Desai, 2025; Desai, 2026), but the defense remains unimplemented and introduces new failure modes (misclassification, adversarial evasion) that require formal Byzantine-fault repair logic (Zheng et al., 2026; Ditmarsch et al., 2024). LLM nondeterminism creates a failure mode that standard distributed-systems fault tolerance cannot prevent.
+
+  Dependency chains in agentic workflows create temporal and causal coupling that makes shared state both a bottleneck and—if properly managed—a coordination mechanism. CORAL instantiates shared persistent memory as an explicit substrate for autonomous agent cooperation, achieving 3–10× faster convergence than fixed evolutionary search and outperforming independent single-agent runs despite equivalent total compute (Qu et al., 2026). Shared-memory coordination gains are not reducible to additional resources; they come from the structure of shared state itself.
+
+  The field is transitioning from constraint-violating designs to constraint-respecting designs. Constraint-violating designs (naive cache sharing, generic checkpoint-restore, fixed evolutionary search) treat state management as a performance tuning problem and fail catastrophically at scale: 90% throughput collapse, 100% duplicate tool commits, 60–100 evaluations to convergence. Constraint-respecting designs explicitly model the properties that break naive approaches: algebraic decomposition for adapter divergence, formal recovery protocols for output irreversibility, shared-memory coordination for agent cooperation. Both correctness and performance are preserved in constraint-respecting systems.
+
+  However, only three credible exemplars exist (ForkKV, ACRFence, CORAL), each addressing a single constraint in isolation. No integrated system combines all three. No formal semantics exists for multi-agent LLM state management—what operations are safe, what orderings must be respected, what failure modes remain possible even with constraint-respecting mechanisms. No unified theory exists for when shared persistent memory helps versus hurts, or how to design shared-memory protocols that scale to heterogeneous workflows and diverse adapter configurations. The interactions between constraint-respecting layers remain underconstrained: if an agent in a shared-memory coordinated system triggers checkpoint-restore and diverges through GPU nondeterminism, should divergent trajectories overwrite prior shared state or be tagged as conflicts? Should shared persistent memory itself be checkpointed and restored?
+
+  Future work must move from point solutions to a coherent design space. Research must (1) implement and formalize ACRFence's replay-versus-fork classification with Byzantine-fault guarantees on realistic multi-step agentic workflows; (2) generalize base-residual cache decomposition beyond LoRA to IA³, (LoRA)², QLoRA, and head-level adapters; (3) extend shared-memory coordination to ReAct chains, MapReduce parallelism, and hybrid workflows beyond evolutionary search; (4) develop formal semantics for multi-agent agentic workflows that characterizes when shared state is safe—via dependency chain structure expressed as directed acyclic graphs or partially-ordered sets—and when it introduces race conditions, deadlock, or causality violations. The evidence shows that constraint-respecting architecture is possible and profitable. The remaining work is to make it systematic, rigorous, and composable across the full scope of multi-agent LLM systems.
+
+  ## References
+
+  - Wang et al., 2026. ForkKV: Scaling Multi-LoRA Agent Serving via Copy-on-Write Disaggregated KV Cache. https://ar5iv.labs.arxiv.org/abs/2604.06370
+  - Ganjihal, 2026. Predictive Multi-Tier Memory Management for KV Cache in Large-Scale GPU Inference. https://ar5iv.labs.arxiv.org/abs/2604.26968
+  - Li et al., 2025. Oneiros: KV Cache Optimization through Parameter Remapping for Multi-tenant LLM Serving. https://ar5iv.labs.arxiv.org/abs/2507.11507
+  - Zhang et al., 2025. Improving the Serving Performance of Multi-LoRA Large Language Models via Efficient LoRA and KV Cache Management. https://ar5iv.labs.arxiv.org/abs/2505.03756
+  - Verma, 2026. Problems of Scaling Large Language Model Inference During Simultaneous Operation of Multiple Autonomous Agents. https://www.semanticscholar.org/paper/d7d4e4334bc2095f076bd6c2c3891e1b2a150a8e
+  - Zheng et al., 2026. ACRFence: Preventing Semantic Rollback Attacks in Agent Checkpoint-Restore. https://ar5iv.labs.arxiv.org/abs/2603.20625
+  - Vidal, 2023. From Reversible Computation to Checkpoint-Based Rollback Recovery for Message-Passing Concurrent Programs. https://ar5iv.labs.arxiv.org/abs/2309.04873
+  - Ahn, 2023. Efficient Sender-Based Message Logging Tolerating Simultaneous Failures with Always No Rollback Property. https://www.semanticscholar.org/paper/e6de700a69c3d19f9ef50e4fbb6b9574471a7e50
+  - Desai, 2025. Ensuring Exactly-Once Semantics in Kafka Streaming Systems. https://www.semanticscholar.org/paper/ccd11597b0bf8896d8d77141d2d471133922ccd1
+  - Desai, 2026. Reliable Event-Driven Processing in Distributed Systems: Stage-Aware Retries, Idempotency, and Exactly-Once Semantics. https://www.semanticscholar.org/paper/3b59810b7d32d1ce0d18a7bafa59bf70d09e4057
+  - Ditmarsch et al., 2024. A Logic for Repair and State Recovery in Byzantine Fault-tolerant Multi-agent Systems. https://ar5iv.labs.arxiv.org/abs/2401.06451
+  - Qu et al., 2026. CORAL: Towards Autonomous Multi-Agent Evolution for Open-Ended Discovery. https://ar5iv.labs.arxiv.org/abs/2604.01658
+narrative_statements:
+- text: When different agents process identical input tokens through different LoRA adapters, the resulting hidden activations diverge irreversibly, preventing cache reuse in downstream layers and breaking the assumptions behind prefix caching (Verma, 2026).
+  claim_refs:
+  - C8
+  expert_refs: []
+- text: 'LLM agents violate this assumption: even at temperature zero, GPU nondeterminism produces semantically different tool calls after restore, and servers treat these as fresh requests, creating task duplicates (Zheng et al., 2026; Vidal, 2023; Ahn, 2023).'
+  claim_refs:
+  - C9
+  expert_refs: []
+- text: We first establish that the KV cache footprint is the governing scarce resource in multi-agent serving and that adapter-specific divergence makes prefix caching fail in a way that cannot be recovered by general-purpose optimization (Wang et al., 2026; Ganjihal, 2026; Li et al., 2025; Verma, 2026).
+  claim_refs:
+  - C1
+  - C8
+  expert_refs: []
+- text: We then show how algebraic decomposition resolves the memory-versus-correctness dilemma (Wang et al., 2026).
+  claim_refs:
+  - C4
+  - C5
+  - C7
+  expert_refs: []
+- text: We next isolate the output commit problem and its root cause in LLM nondeterminism violating deterministic-caller assumptions (Zheng et al., 2026; Vidal, 2023; Ahn, 2023; Desai, 2025; Desai, 2026).
+  claim_refs:
+  - C9
+  - C10
+  - C11
+  expert_refs: []
+- text: We then establish shared persistent memory as a coordination substrate by showing CORAL's gains over single-agent and fixed-evolutionary baselines (Qu et al., 2026).
+  claim_refs:
+  - C13
+  - C14
+  - C15
+  expert_refs: []
+- text: |-
+    ## The memory bottleneck: KV cache footprint and prefix caching failure
+
+    The KV cache is the primary memory bottleneck in multi-agent LLM serving (Wang et al., 2026; Ganjihal, 2026; Li et al., 2025).
+  claim_refs:
+  - C1
+  expert_refs: []
+- text: This property is called adapter-specific divergence (Wang et al., 2026; Zhang et al., 2025).
+  claim_refs:
+  - C2
+  expert_refs: []
+- text: 1% on MapReduce) (Wang et al., 2026).
+  claim_refs:
+  - C3
+  expert_refs: []
+- text: 95 points on APIGen with Llama3-8B (Wang et al., 2026).
+  claim_refs:
+  - C6
+  expert_refs: []
+- text: 'The core tension is this: adapter-specific divergence cannot be overcome by compression or tiering alone (Wang et al., 2026; Zhang et al., 2025).'
+  claim_refs:
+  - C2
+  expert_refs: []
+- text: |-
+    ## Algebraic decomposition as a solution strategy: ForkKV and the base-residual split
+
+    ForkKV resolves the memory-versus-correctness dilemma by accepting adapter-specific divergence as inviolable and architecturing the cache around it through explicit algebraic decomposition (Wang et al., 2026).
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: However, sharing the base cache beyond the first layer is mathematically lossy (Wang et al., 2026).
+  claim_refs:
+  - C5
+  expert_refs: []
+- text: 7× relative to the baseline of independent full caches (Wang et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: 60× on MapReduce-style parallelism (Wang et al., 2026), enabled by a 6.
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: 71% average quality loss compared to the baseline (Wang et al., 2026).
+  claim_refs:
+  - C7
+  expert_refs: []
+- text: LLM agents violate the deterministic-caller assumption that makes this guarantee work (Zheng et al., 2026; Desai, 2025; Desai, 2026).
+  claim_refs:
+  - C10
+  expert_refs: []
+- text: 'This is the output commit problem, inherited directly from distributed fault-tolerance systems: external effects (tool calls, database writes, API requests) cannot be undone or replayed without risk of corruption (Zheng et al., 2026; Vidal, 2023; Ahn, 2023).'
+  claim_refs:
+  - C9
+  expert_refs: []
+- text: In ACRFence's controlled testbed, all ten checkpoint-restore trials produced duplicate commits (100%) while a no-checkpoint baseline produced none (Zheng et al., 2026).
+  claim_refs:
+  - C11
+  expert_refs: []
+- text: 'ACRFence proposes a defense: a lightweight analyzer LLM performs replay-versus-fork classification at each irreversible tool call, deciding whether the restored agent should re-execute its previous trajectory (replay) or diverge to a new path (fork) based on semantic equivalence of pending tool calls (Zheng et al., 2026; Ditmarsch et al., 2024).'
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: CORAL departs from fixed evolutionary search by delegating evolutionary search decisions—parent selection, intermediate testing, and what knowledge to externalize and reuse—to autonomous agents accumulating knowledge in persistent shared memory (Qu et al., 2026).
+  claim_refs:
+  - C13
+  expert_refs: []
+- text: CORAL achieves the best final score on all 11 benchmark tasks, establishing new state-of-the-art on 8, with a 3–10× higher improvement rate than fixed-evolutionary baselines and convergence in 5–20 evaluations versus 60–100 (Qu et al., 2026).
+  claim_refs:
+  - C14
+  expert_refs: []
+- text: CORAL's multi-agent co-evolution outperforms the best of four independent single-agent runs, so the gains from shared-memory coordination cannot be attributed to more total computation (Qu et al., 2026).
+  claim_refs:
+  - C15
+  expert_refs: []
+- text: 5 + OpenCode), showing that the shared-memory coordination principle is not an artifact of a particular model's reasoning capability (Qu et al., 2026).
+  claim_refs:
+  - C15
+  expert_refs: []
+- text: '** ACRFence''s proposed analyzer-LLM classifier is elegant but unimplemented (Zheng et al., 2026; Ditmarsch et al., 2024).'
+  claim_refs:
+  - C12
+  expert_refs: []
+- text: '** ForkKV is designed for LoRA specifically because LoRA has an explicit low-rank structure (xA_iB_i where A and B are rectangular matrices of rank r << d) that allows the decomposition to be exact (Wang et al., 2026).'
+  claim_refs:
+  - C4
+  expert_refs: []
+- text: '** CORAL demonstrates that shared persistent memory enables coordination in evolutionary search, but the evidence is limited to that domain (Qu et al., 2026).'
+  claim_refs:
+  - C13
+  - C14
+  - C15
+  expert_refs: []
+- text: 71% acceptable quality loss (Wang et al., 2026).
+  claim_refs:
+  - C4
+  - C5
+  - C7
+  expert_refs: []
+- text: ACRFence isolates the mechanism (100% duplicate rate in restore trials) and proposes replay-versus-fork classification as a defense (Zheng et al., 2026; Desai, 2025; Desai, 2026), but the defense remains unimplemented and introduces new failure modes (misclassification, adversarial evasion) that require formal Byzantine-fault repair logic (Zheng et al., 2026; Ditmarsch et al., 2024).
+  claim_refs:
+  - C10
+  - C11
+  - C12
+  expert_refs: []
+- text: CORAL instantiates shared persistent memory as an explicit substrate for autonomous agent cooperation, achieving 3–10× faster convergence than fixed evolutionary search and outperforming independent single-agent runs despite equivalent total compute (Qu et al., 2026).
+  claim_refs:
+  - C13
+  - C14
+  - C15
+  expert_refs: []
+gaps:
+- description: The interaction between checkpoint-restore nondeterminism and exactly-once/idempotency guarantees has been demonstrated only in a single simulated MCP testbed; measuring duplicate rates in deployed durable-execution and streaming pipelines is collectable but undone [C10, C11].
+  gap_type: empirical
+- description: The field lacks an agreed instrument to certify that a recovery mechanism preserves correctness under nondeterministic callers — deterministic-caller assumptions underpin existing idempotency protocols, and no accepted method verifies replay-vs-fork correctness for LLM agents [C10, C12].
+  gap_type: methodological
+- description: There is no framework predicting when algebraic cache disaggregation (ForkKV) outperforms compression, tiering, or eviction under a given adapter-overlap and context-sharing profile; the layer-one losslessness boundary is proven but the general design frontier is not [C4, C5].
+  gap_type: theoretical
