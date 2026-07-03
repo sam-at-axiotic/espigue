@@ -132,13 +132,15 @@ pub(crate) async fn post_json_with_retry(
             }
         }
 
-        // Jitter breaks the lockstep herd: without it, N concurrent callers
-        // that hit the same 429 with no Retry-After all sleep exactly
-        // backoff_base and re-fire simultaneously. A server-provided
-        // Retry-After is used as sent — that pacing is the server's call.
+        // Jitter breaks the lockstep herd: N concurrent callers that hit the
+        // same 429 otherwise sleep the same wait — the server's Retry-After
+        // included — and re-fire simultaneously. The server value is a
+        // floor, not a schedule. Jitter lands AFTER the cap so hitting
+        // max_wait cannot re-synchronize the herd.
         let wait = wait_hint
-            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1) + jitter())
-            .min(policy.max_wait);
+            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1))
+            .min(policy.max_wait)
+            + jitter();
         tokio::time::sleep(wait).await;
         attempt += 1;
     }
