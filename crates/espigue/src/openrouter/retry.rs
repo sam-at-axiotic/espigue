@@ -144,15 +144,16 @@ pub(crate) async fn post_json_with_retry(
     }
 }
 
-/// 0–1s of clock-derived jitter (subsecond nanos), avoiding a rand
-/// dependency. Concurrent tasks reach here at different instants, which is
-/// all the decorrelation the backoff herd needs.
+/// 0–250ms of jitter from `RandomState`'s per-instance random keys — real
+/// entropy without a rand dependency. NOT clock-derived: macOS quantizes
+/// `SystemTime` to whole microseconds, so "subsecond nanos" schemes return
+/// a constant there and the herd survives.
 fn jitter() -> Duration {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    Duration::from_millis(u64::from(nanos % 1000))
+    use std::hash::{BuildHasher, Hasher};
+    let h = std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish();
+    Duration::from_millis(h % 250)
 }
 
 /// Parse an integer-seconds `Retry-After` header. HTTP-date values are rare
@@ -174,6 +175,20 @@ mod tests {
     use serde_json::json;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[test]
+    fn jitter_produces_distinct_nonzero_values() {
+        // Regression net for the macOS clock-quantization no-op: a
+        // clock-derived jitter returned constant zero there. 64 samples must
+        // show real spread.
+        let samples: Vec<Duration> = (0..64).map(|_| jitter()).collect();
+        let distinct: std::collections::HashSet<_> = samples.iter().collect();
+        assert!(distinct.len() > 8, "jitter barely varies: {distinct:?}");
+        assert!(
+            samples.iter().any(|d| !d.is_zero()),
+            "jitter is always zero"
+        );
+    }
 
     fn fast_policy(retry_post_send: bool) -> RetryPolicy {
         RetryPolicy {
