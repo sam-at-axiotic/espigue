@@ -69,8 +69,9 @@ impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
     /// ## Contract
     ///
     /// - Spawns exactly `config.n_initial_drafts` drafts concurrently.
-    /// - Runs exactly `config.n_denoise_steps` iterations per trajectory (fixed cap,
-    ///   `early_stopping=false` — CONTEXT locked decision).
+    /// - Runs exactly `config.n_denoise_steps` iterations per trajectory (fixed cap;
+    ///   consensus's `early_stopping` knob is deliberately not ported — CONTEXT
+    ///   locked decision; `plateau_threshold` is the only live early-stop).
     /// - After the loop, runs a FRESH final fitness re-evaluation for every trajectory
     ///   before calling `sort_candidates_best_first` (Pitfall 4).
     /// - If retrieved is empty for all gaps, draft is returned UNCHANGED (runner.py guard).
@@ -182,7 +183,9 @@ impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
         );
 
         // ── Step 2: Per-trajectory denoise Loop(S) ────────────────────────────
-        // Fixed cap — early_stopping is always false (CONTEXT locked decision).
+        // Fixed cap — consensus's early_stopping knob is deliberately not
+        // ported (CONTEXT locked decision); plateau_threshold below is the
+        // only live early-stop.
         // A5 rung 4: trajectories evolve concurrently via join_all over
         // states.iter_mut() (closes the 23-02 deferral). No Arc<Box<dyn>>
         // refactor — the 23-02 blocker applied only to JoinSet 'static spawning;

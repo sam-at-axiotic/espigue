@@ -38,6 +38,7 @@ use crate::ttd::artifact::{ArgumentationGraph, GraphEdge, GraphNode, NodeAnnotat
 use crate::ttd::config::TtdConfig;
 use crate::ttd::fitness::{is_valid_graph, is_valid_v2, traceability_veto_graph, FitnessEval};
 use crate::ttd::mod_types::TtdError;
+use crate::ttd::stages::synthesis::parse_gaps_xml;
 use crate::ttd::stages::{
     DraftGen, EvalFitness, GapIdentify, GapResolve, Merger, RetrievedContext,
 };
@@ -761,81 +762,8 @@ impl GapIdentify<ArgumentationGraph> for GraphGapIdentify {
     }
 }
 
-/// Parse a `<gaps>` XML response into `IdentifiedGap` values.
-///
-/// T1 ruled contract: missing or empty `<gaps>` block → `Ok(vec![])` (never
-/// `Err`, never a bare `Vec`). A gap is valid iff it has a non-empty
-/// `<description>`; `<query>` defaults to the description when absent.
-fn parse_gaps_xml(raw: &str) -> Result<Vec<IdentifiedGap>, TtdError> {
-    let xml_block = match extract_xml_block(raw, "gaps") {
-        Some(block) => block,
-        None => return Ok(Vec::new()),
-    };
-
-    use quick_xml::events::Event;
-    use quick_xml::Reader;
-
-    let mut reader = Reader::from_str(&xml_block);
-    reader.trim_text(true);
-
-    let mut gaps = Vec::new();
-    let mut buf = Vec::new();
-    let mut in_description = false;
-    let mut in_query = false;
-    let mut description = String::new();
-    let mut query = String::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                let tag = std::str::from_utf8(e.name().as_ref()).unwrap_or("").to_string();
-                match tag.as_str() {
-                    "gap" => {
-                        description.clear();
-                        query.clear();
-                    }
-                    "description" => { in_description = true; }
-                    "query" => { in_query = true; }
-                    _ => {}
-                }
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.unescape().unwrap_or_default().to_string();
-                if in_description {
-                    description.push_str(&text);
-                } else if in_query {
-                    query.push_str(&text);
-                }
-            }
-            Ok(Event::End(e)) => {
-                let tag = std::str::from_utf8(e.name().as_ref()).unwrap_or("").to_string();
-                match tag.as_str() {
-                    "description" => { in_description = false; }
-                    "query" => { in_query = false; }
-                    "gap" => {
-                        if !description.is_empty() {
-                            gaps.push(IdentifiedGap {
-                                description: description.trim().to_string(),
-                                query: if query.is_empty() {
-                                    description.trim().to_string()
-                                } else {
-                                    query.trim().to_string()
-                                },
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(gaps)
-}
+// `parse_gaps_xml` (T1 ruled contract) lives in synthesis.rs — one canonical
+// copy shared by all three stages; imported at the top of this file.
 
 // ── GraphGapResolve ───────────────────────────────────────────────────────────
 
@@ -2061,7 +1989,7 @@ mod tests {
 
     // ╔═══════════════════════════════════════════════════════════════════════╗
     // ║ SEAM F4b — GRAPH parser (characterisation net, W-522022c5)              ║
-    // ║ Reaches the private file-level `parse_gaps_xml` via super::super.        ║
+    // ║ Reaches the shared parser (synthesis.rs) via this file's re-import.      ║
     // ║ PINS THE T1 RULED CONTRACT: returns Result; a gap is valid iff non-empty ║
     // ║ <description> (query defaults to description); missing block → Ok(vec![]).║
     // ║ (Re-baselined from the prior bare-Vec / both-fields-required contract per ║

@@ -22,8 +22,12 @@ use base::search::{EmbeddingService, EmbeddingTask};
 use base::AlzinaResult;
 
 use super::DEFAULT_BASE_URL;
+use super::retry::{PostFailure, RetryPolicy, post_json_with_retry};
 
 const HTTP_TIMEOUT_SECS: u64 = 120;
+/// Connect-phase timeout — fail fast as a retryable connect error instead of
+/// burning the total timeout on a blackholed connect (see executor.rs).
+const CONNECT_TIMEOUT_SECS: u64 = 15;
 /// Max inputs per request. OpenAI-compatible endpoints accept arrays; keep the
 /// batch bounded (mirrors the Jina client).
 const MAX_BATCH_SIZE: usize = 128;
@@ -84,6 +88,7 @@ impl OpenRouterEmbeddingService {
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
             .build()
             .map_err(|e| degraded(format!("reqwest client build: {e}"), format!("{e}")))?;
         Ok(Self { client, api_key, model, dimensions, base_url })
@@ -102,37 +107,33 @@ impl OpenRouterEmbeddingService {
                 "input": chunk,
                 "dimensions": self.dimensions,
             });
-            let resp = self
-                .client
-                .post(&url)
-                .bearer_auth(&self.api_key)
-                .header("HTTP-Referer", "https://github.com/axiotic/espigue")
-                .header("X-Title", "espigue")
-                .json(&body)
-                .send()
-                .await
-                .map_err(|e| {
-                    tracing::warn!(error = %e, "OpenRouter embeddings request failed (network)");
+            let resp = post_json_with_retry(
+                &self.client,
+                &url,
+                &self.api_key,
+                &body,
+                "embeddings",
+                &RetryPolicy::embeddings(),
+            )
+            .await
+            .map_err(|f| match f {
+                PostFailure::Transport(e) => degraded(
+                    format!("OpenRouter embeddings request failed: {e}"),
+                    format!("OpenRouter embeddings unavailable: {e}"),
+                ),
+                PostFailure::Http { status, body } => {
+                    let reason = match status.as_u16() {
+                        429 => "OpenRouter embeddings rate-limited (429)".to_string(),
+                        401 | 403 => "OpenRouter embeddings auth failed (check OPENROUTER_API_KEY)"
+                            .to_string(),
+                        _ => format!("OpenRouter embeddings returned {status}"),
+                    };
                     degraded(
-                        format!("OpenRouter embeddings request failed: {e}"),
-                        format!("OpenRouter embeddings unavailable: {e}"),
+                        format!("OpenRouter embeddings HTTP {status}: {body}"),
+                        reason,
                     )
-                })?;
-
-            if !resp.status().is_success() {
-                let status = resp.status();
-                let text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
-                tracing::warn!(status = %status, body = %text, "OpenRouter embeddings non-2xx");
-                let reason = match status.as_u16() {
-                    429 => "OpenRouter embeddings rate-limited (429)".to_string(),
-                    401 | 403 => "OpenRouter embeddings auth failed (check OPENROUTER_API_KEY)".to_string(),
-                    _ => format!("OpenRouter embeddings returned {status}"),
-                };
-                return Err(degraded(
-                    format!("OpenRouter embeddings HTTP {status}: {text}"),
-                    reason,
-                ));
-            }
+                }
+            })?;
 
             let parsed: EmbeddingResponse = resp.json().await.map_err(|e| {
                 degraded(
@@ -275,5 +276,63 @@ mod tests {
     #[test]
     fn empty_key_errors() {
         assert!(OpenRouterEmbeddingService::new("", "m", 1536).is_err());
+    }
+
+    #[tokio::test]
+    async fn transient_429_recovers_on_retry() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/embeddings"))
+            .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "0"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/embeddings"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{ "index": 0, "embedding": [0.1, 0.2, 0.3] }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let svc = OpenRouterEmbeddingService::with_base_url("k", "m", 3, server.uri()).unwrap();
+        let v = svc
+            .embed("hello", EmbeddingTask::Query)
+            .await
+            .expect("recovers after 429");
+        assert_eq!(v, vec![0.1, 0.2, 0.3]);
+    }
+
+    #[tokio::test]
+    async fn auth_failure_is_not_retried() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/embeddings"))
+            .respond_with(ResponseTemplate::new(401).set_body_string("unauthorized"))
+            .expect(1) // fatal on first sight
+            .mount(&server)
+            .await;
+
+        let svc = OpenRouterEmbeddingService::with_base_url("k", "m", 3, server.uri()).unwrap();
+        let err = svc
+            .embed("x", EmbeddingTask::Query)
+            .await
+            .expect_err("401 errors");
+        match err {
+            AlzinaError::Search(d) => {
+                assert!(d.degraded);
+                assert!(
+                    d.degradation_reason
+                        .as_deref()
+                        .unwrap_or("")
+                        .contains("auth"),
+                    "reason: {:?}",
+                    d.degradation_reason
+                );
+            }
+            other => panic!("expected Search error, got {other:?}"),
+        }
     }
 }
