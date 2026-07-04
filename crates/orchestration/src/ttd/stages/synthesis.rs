@@ -784,6 +784,70 @@ pub(crate) fn build_graph_evidence_with_sections(
     out
 }
 
+/// Ceiling fix (bench run 4): quote evidence for candidate-cited sources with
+/// no verified-quote graph node.
+///
+/// Stage-2 gap resolve authors verbatim quotes from retrieved full text, but
+/// the merger's evidence was graph-only, so it dropped those claims wholesale —
+/// run 4 lost its only multi-source material this way (12 claims pairing two
+/// gap-retrieved papers, neither in the graph). This builder carries the
+/// candidates' own quotes for such sources into the evidence, marked
+/// `retrieved (no graph node)` so the merger copies them with `source=` only.
+///
+/// Trust model: these quotes are model-authored, not DB-verified — the
+/// post-process `verify_synthesis_quotes` pass checks every merged quote
+/// against the cited source's STORED text, so a fabricated quote is stamped,
+/// never silently trusted. Source ids must pass `is_valid_source_id` (shape or
+/// panel lane): fabricated ids like `C14_synthesis_reference` stay out.
+/// Quotes are deduped per (source, text) and bounded.
+pub(crate) fn build_retrieved_evidence(
+    candidates: &[SynthesisArtifact],
+    graph_evidence_sources: &std::collections::BTreeSet<String>,
+    panel_ids: &std::collections::HashSet<String>,
+) -> String {
+    use std::collections::{BTreeMap, BTreeSet};
+    /// Quotes per source — enough to give the merger a real choice, bounded
+    /// against a degenerate candidate spamming one paper.
+    const MAX_QUOTES_PER_SOURCE: usize = 3;
+    /// Per-quote char cap. Gap-resolve quotes are sentence-length; the cap only
+    /// guards against a candidate dumping a paragraph. Truncation keeps the text
+    /// a substring of the source, so a copied truncated quote still verifies.
+    const MAX_QUOTE_CHARS: usize = 600;
+
+    let mut by_source: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
+    for candidate in candidates {
+        for claim in &candidate.claims {
+            for quote in &claim.quotes {
+                let src = quote.source.trim();
+                let text = quote.text.trim();
+                if text.is_empty() || graph_evidence_sources.contains(src) {
+                    continue;
+                }
+                if !crate::ttd::term_sheet::is_valid_source_id(src, panel_ids) {
+                    continue;
+                }
+                if !seen.insert((src.to_string(), text.to_string())) {
+                    continue;
+                }
+                let quotes = by_source.entry(src.to_string()).or_default();
+                if quotes.len() < MAX_QUOTES_PER_SOURCE {
+                    quotes.push(text.chars().take(MAX_QUOTE_CHARS).collect());
+                }
+            }
+        }
+    }
+
+    let mut out = String::new();
+    for (src, quotes) in &by_source {
+        out.push_str(&format!("### {src} — retrieved (no graph node)\n"));
+        for q in quotes {
+            out.push_str(&format!("- retrieved quote: \"{q}\"\n"));
+        }
+    }
+    out
+}
+
 #[async_trait]
 impl Merger<SynthesisArtifact> for SynthesisMerger {
     async fn merge(
@@ -822,6 +886,32 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                         build_graph_evidence_with_sections(g, &self.panel_prose, &self.tier_map)
                     })
                     .unwrap_or_default();
+                // Ceiling fix (bench run 4): append the candidates' own quotes
+                // for validly-shaped sources outside the graph evidence, so the
+                // merger keeps gap-retrieved claims instead of dropping them.
+                let graph_evidence_sources: std::collections::BTreeSet<String> = self
+                    .graph
+                    .as_ref()
+                    .map(|g| {
+                        g.nodes
+                            .iter()
+                            .filter(|n| {
+                                n.verification_status.as_deref() == Some("verified")
+                                    && n.quote.as_deref().map_or(false, |q| !q.trim().is_empty())
+                            })
+                            .map(|n| n.expert_id.as_str().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let panel_ids: std::collections::HashSet<String> =
+                    self.tier_map.keys().cloned().collect();
+                let retrieved_evidence =
+                    build_retrieved_evidence(candidates, &graph_evidence_sources, &panel_ids);
+                let node_evidence = if retrieved_evidence.is_empty() {
+                    node_evidence
+                } else {
+                    format!("{node_evidence}\n{retrieved_evidence}")
+                };
                 // Diagnostic: how much verified-quote evidence reached the merger,
                 // and how many draft node_refs survived (now informational only —
                 // the merger no longer depends on them).
@@ -852,6 +942,55 @@ impl Merger<SynthesisArtifact> for SynthesisMerger {
                         node_evidence_chars = node_evidence.len(),
                         draft_cited_node_refs = cited_node_refs,
                         "ttd_perf: F14 merger graph-evidence (option B — full graph to Opus)"
+                    );
+                    // Source-breadth at merger entry (bench 2026-07: run 3 merged
+                    // down to 6 distinct sources / 0 multi-source claims). These
+                    // counters say whether breadth was already gone in the drafts
+                    // or was lost in the merge — compare against the same counts
+                    // on the merged output.
+                    let distinct_sources = |c: &SynthesisArtifact| -> usize {
+                        c.claims
+                            .iter()
+                            .flat_map(|cl| cl.sources.iter())
+                            .collect::<std::collections::HashSet<_>>()
+                            .len()
+                    };
+                    let multi_source_claims = |c: &SynthesisArtifact| -> usize {
+                        c.claims.iter().filter(|cl| cl.sources.len() >= 2).count()
+                    };
+                    let per_candidate_distinct: Vec<usize> =
+                        candidates.iter().map(distinct_sources).collect();
+                    let per_candidate_multi: Vec<usize> =
+                        candidates.iter().map(multi_source_claims).collect();
+                    let union_distinct = candidates
+                        .iter()
+                        .flat_map(|c| c.claims.iter())
+                        .flat_map(|cl| cl.sources.iter())
+                        .collect::<std::collections::HashSet<_>>()
+                        .len();
+                    let graph_quote_sources = match self.graph.as_ref() {
+                        Some(g) => g
+                            .nodes
+                            .iter()
+                            .filter(|n| {
+                                n.verification_status.as_deref() == Some("verified")
+                                    && n.quote.as_deref().map_or(false, |q| !q.trim().is_empty())
+                            })
+                            .map(|n| n.expert_id.as_str())
+                            .collect::<std::collections::HashSet<_>>()
+                            .len(),
+                        None => 0,
+                    };
+                    tracing::info!(
+                        target: "ttd_perf",
+                        per_candidate_distinct_sources = ?per_candidate_distinct,
+                        per_candidate_multi_source_claims = ?per_candidate_multi,
+                        union_distinct_sources = union_distinct,
+                        graph_quote_sources,
+                        retrieved_evidence_sources =
+                            retrieved_evidence.matches("### ").count(),
+                        retrieved_evidence_chars = retrieved_evidence.len(),
+                        "ttd_perf: merger-entry source breadth"
                     );
                 }
                 let (system, user) = crate::ttd::prompts::lit_review::render_synthesis_merger_v2_split(
@@ -2386,6 +2525,113 @@ mod tests {
     // ║ (Re-baselined from the prior Err-on-missing split per the trip-wire      ║
     // ║  protocol — the contract change is INTENDED under Skuld's T1 ruling.)    ║
     // ╚═══════════════════════════════════════════════════════════════════════╝
+    mod retrieved_evidence {
+        use crate::ttd::artifact::{Claim, ClaimQuote, SynthesisArtifact};
+
+        fn artifact_with_quotes(quotes: Vec<(&str, &str)>) -> SynthesisArtifact {
+            SynthesisArtifact {
+                schema_version: "2.0".into(),
+                study_id: String::new(),
+                round_id: String::new(),
+                question_id: String::new(),
+                generated_at: chrono::Utc::now(),
+                model: "m".into(),
+                prompt_version: "v".into(),
+                code_version: crate::ttd::artifact::code_version(),
+                claims: vec![Claim {
+                    text: "c".into(),
+                    agreement_level: None,
+                    sources: quotes.iter().map(|(s, _)| s.to_string()).collect(),
+                    counterarguments: vec![],
+                    support_level: None,
+                    evidence_grade: None,
+                    method: None,
+                    year: None,
+                    lineage: None,
+                    quotes: quotes
+                        .into_iter()
+                        .map(|(s, t)| ClaimQuote {
+                            source: s.into(),
+                            text: t.into(),
+                            status: None,
+                            snapped: false,
+                            inherited: false,
+                            node_id: None,
+                        })
+                        .collect(),
+                    node_refs: vec![],
+                    citation: None,
+                }],
+                areas_of_agreement: vec![],
+                areas_of_disagreement: vec![],
+                uncertainties: vec![],
+                minority_reports: vec![],
+                narrative: String::new(),
+                narrative_statements: vec![],
+                gaps: vec![],
+            }
+        }
+
+        /// Ceiling fix: a validly-shaped non-graph source's quote is rendered,
+        /// marked retrieved; a graph-covered source's quote is not duplicated.
+        #[test]
+        fn non_graph_source_rendered_graph_source_excluded() {
+            let cand = artifact_with_quotes(vec![
+                ("arxiv:2605.04264", "persistent memory is turning agents stateful"),
+                ("arxiv:1111.11111", "already covered by a graph node"),
+            ]);
+            let graph_sources: std::collections::BTreeSet<String> =
+                ["arxiv:1111.11111".to_string()].into();
+            let out = super::super::build_retrieved_evidence(
+                &[cand],
+                &graph_sources,
+                &std::collections::HashSet::new(),
+            );
+            assert!(out.contains("### arxiv:2605.04264 — retrieved (no graph node)"));
+            assert!(out.contains("persistent memory is turning agents stateful"));
+            assert!(!out.contains("arxiv:1111.11111"));
+        }
+
+        /// Fabricated ids (run 4: `C14_synthesis_reference`) never become
+        /// evidence; duplicate (source, text) pairs render once; per-source cap
+        /// holds.
+        #[test]
+        fn junk_ids_excluded_dupes_and_cap_applied() {
+            let cands = vec![
+                artifact_with_quotes(vec![
+                    ("C14_synthesis_reference", "fabricated id quote"),
+                    ("arxiv:2604.19540", "q1"),
+                    ("arxiv:2604.19540", "q1"), // dupe
+                ]),
+                artifact_with_quotes(vec![
+                    ("arxiv:2604.19540", "q2"),
+                    ("arxiv:2604.19540", "q3"),
+                    ("arxiv:2604.19540", "q4"), // over the 3-per-source cap
+                ]),
+            ];
+            let out = super::super::build_retrieved_evidence(
+                &cands,
+                &std::collections::BTreeSet::new(),
+                &std::collections::HashSet::new(),
+            );
+            assert!(!out.contains("fabricated id quote"));
+            assert_eq!(out.matches("retrieved quote:").count(), 3, "cap is 3 per source");
+            assert_eq!(out.matches("q1").count(), 1, "dupes render once");
+        }
+
+        /// No candidate quotes → empty string (merger evidence unchanged).
+        #[test]
+        fn no_quotes_yields_empty() {
+            let cand = artifact_with_quotes(vec![]);
+            let out = super::super::build_retrieved_evidence(
+                &[cand],
+                &std::collections::BTreeSet::new(),
+                &std::collections::HashSet::new(),
+            );
+            assert!(out.is_empty());
+        }
+    }
+
     mod f4a_synthesis_parser {
         #[test]
         fn f4_synthesis_desc_only_yields_one_gap() {
