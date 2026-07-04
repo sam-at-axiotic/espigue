@@ -746,6 +746,13 @@ pub fn render_plan_draft(
         )
     };
 
+    // Example de-saturation (bench run 6): the old skeleton example put every
+    // id at exactly the 2-section cap (C1 x2, C3 x2, T2 x2) — Haiku imitates
+    // the "anchor claim spans the document" pattern and drifts one over ("C1
+    // assigned to 3 sections" was 3 of 4 vetoes in run 6). Each example id now
+    // appears exactly ONCE, so natural drift lands at 2 — still legal. Example
+    // ids stay within C1-C5/T1 (small corpora exist; the hard rules above name
+    // the real ranges).
     let skeleton_block = match shape {
         NarrativeShape::SectionedLongForm => {
             "\n  <sections>\n    <section>\n      <heading>Introduction</heading>\n      \
@@ -755,15 +762,15 @@ pub fn render_plan_draft(
              <section>\n      <heading>A descriptive title naming the actual tension or idea</heading>\n      \
              <purpose>What this section accomplishes, phrased against the focal question</purpose>\n      \
              <budget_words>600</budget_words>\n      \
-             <claim_ids>C1, C3, T2</claim_ids>\n    </section>\n    \
+             <claim_ids>C2, C3, T1</claim_ids>\n    </section>\n    \
              <section>\n      <heading>Open questions and future directions</heading>\n      \
              <purpose>convert the thin and unresolved literature into a research agenda — what the evidence cannot yet answer, and the concrete next steps</purpose>\n      \
              <budget_words>500</budget_words>\n      \
-             <claim_ids>T2</claim_ids>\n    </section>\n    \
+             <claim_ids>C4</claim_ids>\n    </section>\n    \
              <section>\n      <heading>Conclusion</heading>\n      \
              <purpose>replay the organising framework and re-sort the findings by it; render a verdict (take a position); map the gaps onto future work — a verdict of the framework, not a section summary</purpose>\n      \
              <budget_words>400</budget_words>\n      \
-             <claim_ids>C3</claim_ids>\n    </section>\n    \
+             <claim_ids>C5</claim_ids>\n    </section>\n    \
              <!-- one <section> per skeleton section; every claim ID must exist in the \
              digest; no ID in more than 2 sections; cover at least 60% of claims -->\n  \
              </sections>"
@@ -1659,6 +1666,26 @@ mod tests {
         );
         assert!(long.contains("<id>PT1</id>"), "thread example id off the tension namespace");
         assert!(!long.contains("<id>T1</id>"), "T1 thread example (tension collision) is gone");
+
+        // Run 6: every skeleton-example id must appear exactly ONCE across the
+        // example sections — an id shown at the 2-section cap teaches the
+        // "anchor claim spans the document" pattern and Haiku drifts one over.
+        // Real example spans are single-line and short; the prose mention of
+        // `<claim_ids>` in the hard-rules heading is not a span.
+        let spans: Vec<&str> = long
+            .split("<claim_ids>")
+            .skip(1)
+            .filter_map(|rest| rest.split("</claim_ids>").next())
+            .filter(|inner| inner.len() < 40 && !inner.contains('\n'))
+            .collect();
+        assert_eq!(spans.len(), 4, "four skeleton example sections");
+        for id in ["C1", "C2", "C3", "C4", "C5", "T1"] {
+            let n = spans
+                .iter()
+                .filter(|s| s.split(',').any(|tok| tok.trim() == id))
+                .count();
+            assert!(n <= 1, "example id {id} appears in {n} sections — must be at most one");
+        }
 
         // No tensions → the prompt says no T id is valid instead of "T1-T0".
         let mut no_tension = sample_synthesis(5);
