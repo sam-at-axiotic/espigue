@@ -14,14 +14,18 @@ use std::sync::Arc;
 use base::EmbeddingTask;
 use orchestration::{
     ttd::{
+        artifact::{ArgumentationGraph, SynthesisArtifact},
         citations::{apply_author_year_citations, PaperMeta},
-        engine::{run_engine_with_bib, EngineConfig},
+        engine::{run_engine_with_bib, EngineConfig, ResumeState},
         retrieval::{CallbackLitSearch, LitRetriever, RetrievalPolicy},
         term_sheet::PromptProfile,
     },
     AgentExecutor,
 };
-use search::{BibliographyStore, FusedHit, SqliteBibliographyStore};
+use search::{
+    BibliographyStore, CheckpointStore, FusedHit, RunRecord, SqliteBibliographyStore,
+    SqliteCheckpointStore, StageCheckpoint,
+};
 
 use crate::context::LitContext;
 
@@ -32,7 +36,7 @@ const TOP_K_HARD_CAP: usize = 50;
 /// Default `top_k`.
 pub const DEFAULT_TOP_K: usize = 10;
 /// Default generation model for the TTD stages (OpenRouter-shaped slug).
-pub const DEFAULT_MODEL: &str = "google/gemini-2.5-flash";
+pub const DEFAULT_MODEL: &str = "anthropic/claude-sonnet-5";
 /// Default v2/v3 Stage-2 merger model (provider-shaped Opus slug). Mirrors the
 /// daemon's `claude-opus-4-8` pin, but in OpenRouter form (the bare daemon slug
 /// 400s on OpenRouter).
@@ -155,6 +159,11 @@ pub struct ReviewOptions {
     /// the initial fusion, and the topicality gate; Stage-1/2 gap-fill still
     /// runs and honours [`scope`](Self::scope).
     pub seed_papers: Vec<String>,
+    /// Embedding model slug (recorded in `synthesis_runs` so a resumed run can
+    /// refuse a mismatched embedding space).
+    pub embedding_model: String,
+    /// Embedding vector width (recorded alongside [`embedding_model`](Self::embedding_model)).
+    pub embedding_dim: usize,
 }
 
 impl Default for ReviewOptions {
@@ -166,6 +175,8 @@ impl Default for ReviewOptions {
             merger_model: Some(DEFAULT_MERGER_MODEL.to_string()),
             scope: Scope::CorpusPlusWeb,
             seed_papers: Vec::new(),
+            embedding_model: crate::openrouter::embeddings::DEFAULT_MODEL.to_string(),
+            embedding_dim: crate::openrouter::embeddings::DEFAULT_DIMENSIONS,
         }
     }
 }
@@ -203,6 +214,61 @@ pub fn parse_prompt_profile(raw: Option<&str>) -> Result<PromptProfile, String> 
                  v3/lit-review-long"
             )),
         },
+    }
+}
+
+/// Canonical string for a [`PromptProfile`] — exactly the strings
+/// [`parse_prompt_profile`] accepts, so a stored profile parses back.
+pub fn prompt_profile_str(profile: PromptProfile) -> &'static str {
+    match profile {
+        PromptProfile::V1Delphi => "v1/delphi",
+        PromptProfile::V2LitReview => "v2/lit-review",
+        PromptProfile::V3LitReviewLong => "v3/lit-review-long",
+    }
+}
+
+/// Canonical string for a [`Scope`] — the clap value names the CLI accepts
+/// ("corpus-only", "corpus+web"), so a stored scope parses back.
+pub fn scope_str(scope: Scope) -> &'static str {
+    match scope {
+        Scope::CorpusOnly => "corpus-only",
+        Scope::CorpusPlusWeb => "corpus+web",
+    }
+}
+
+/// Assemble the `synthesis_runs` row for a fresh run (pure — unit-testable).
+///
+/// `top_k` is the already-clamped effective value. `code_version` and `now`
+/// (RFC 3339 UTC, used for both timestamps) are injected so tests need no git
+/// or clock.
+fn build_run_record(
+    run_id: &str,
+    question: &str,
+    question_id: &str,
+    opts: &ReviewOptions,
+    top_k: usize,
+    panel_source_ids: &[String],
+    code_version: String,
+    now: String,
+) -> RunRecord {
+    RunRecord {
+        run_id: run_id.to_string(),
+        question: question.to_string(),
+        question_id: question_id.to_string(),
+        profile: prompt_profile_str(opts.profile).to_string(),
+        model: opts.model.clone(),
+        merger_model: opts.merger_model.clone(),
+        top_k: top_k as i64,
+        scope: scope_str(opts.scope).to_string(),
+        seed_papers: serde_json::to_string(&opts.seed_papers).unwrap_or_else(|_| "[]".into()),
+        embedding_model: opts.embedding_model.clone(),
+        embedding_dim: opts.embedding_dim as i64,
+        panel_source_ids: serde_json::to_string(panel_source_ids)
+            .unwrap_or_else(|_| "[]".into()),
+        code_version,
+        status: "running".to_string(),
+        started_at: now.clone(),
+        updated_at: now,
     }
 }
 
@@ -417,6 +483,58 @@ async fn topicality_gate(
 
 // ── Stage-2 panel refresher ────────────────────────────────────────────────
 
+/// Synthetic [`FusedHit`]s for bare source ids: `build_panel` fills the prose
+/// from the lit DB, so only `source_type`/`source_id` matter here. Shared by
+/// the stage-2 panel refresher and the resume panel rebuild.
+fn synthetic_hits_for_ids(ids: &[String]) -> Vec<FusedHit> {
+    ids.iter()
+        .map(|id| FusedHit {
+            source_type: if id.starts_with("s2:") {
+                "s2".into()
+            } else if id.starts_with("arxiv:") {
+                "arxiv".into()
+            } else {
+                "internal".into()
+            },
+            source_id: id.clone(),
+            title: String::new(),
+            section: None,
+            content: String::new(),
+            content_preview: String::new(),
+            relevance: 0.0,
+        })
+        .collect()
+}
+
+/// Rebuild a panel from recorded source ids — the resume path's panel
+/// restore. Same mechanism as the stage-2 refresher (synthetic hits →
+/// `build_panel`, a pure SQL read) but WITHOUT the [`REFRESH_PANEL_CAP`]
+/// truncation, so the full original panel survives. Ids that resolve to no
+/// local text are dropped with a warning; the caller decides whether an
+/// empty result is fatal.
+async fn panel_from_source_ids(
+    pool: &sqlx::SqlitePool,
+    ids: &[String],
+) -> anyhow::Result<Vec<orchestration::adapter::ExpertResponse>> {
+    let ids: Vec<String> = ids.iter().filter(|id| !id.trim().is_empty()).cloned().collect();
+    let panel = orchestration::adapter::build_panel(synthetic_hits_for_ids(&ids), pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("build_panel failed: {e}"))?;
+    let n_before = panel.len();
+    let panel: Vec<_> = panel
+        .into_iter()
+        .filter(|e| !e.prose.trim().is_empty())
+        .collect();
+    if panel.len() < n_before {
+        tracing::warn!(
+            dropped = n_before - panel.len(),
+            kept = panel.len(),
+            "resume panel rebuild: dropped recorded ids with no local text"
+        );
+    }
+    Ok(panel)
+}
+
 /// Rebuilds the stage-2 panel via `build_panel` with synthetic hits (a pure SQL
 /// read of locally-indexed gap-fill papers). Ids unknown to the lit DB produce
 /// empty prose and are dropped.
@@ -446,26 +564,7 @@ impl orchestration::ttd::engine::PanelRefresher for LitPanelRefresher {
             &source_ids[..]
         };
 
-        let hits: Vec<FusedHit> = ids
-            .iter()
-            .map(|id| FusedHit {
-                source_type: if id.starts_with("s2:") {
-                    "s2".into()
-                } else if id.starts_with("arxiv:") {
-                    "arxiv".into()
-                } else {
-                    "internal".into()
-                },
-                source_id: id.clone(),
-                title: String::new(),
-                section: None,
-                content: String::new(),
-                content_preview: String::new(),
-                relevance: 0.0,
-            })
-            .collect();
-
-        let panel = orchestration::adapter::build_panel(hits, &self.pool)
+        let panel = orchestration::adapter::build_panel(synthetic_hits_for_ids(ids), &self.pool)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -1325,6 +1424,7 @@ pub async fn run_review(
     }
 
     let run_id = uuid::Uuid::new_v4().to_string();
+    let question_id = uuid::Uuid::new_v4().to_string();
     let top_k = opts.top_k.clamp(1, TOP_K_HARD_CAP);
     let profile = opts.profile;
     let model = opts.model.as_str();
@@ -1530,6 +1630,143 @@ pub async fn run_review(
         });
     }
 
+    // B3: persist the run's identity + options in `synthesis_runs` so a killed
+    // run can be resumed. Failure is loud but never kills the run.
+    let checkpoint_store = Arc::new(SqliteCheckpointStore::new((*ctx.lit_pool).clone()));
+    let panel_source_ids: Vec<String> = panel
+        .iter()
+        .map(|e| e.expert_id.as_str().to_string())
+        .collect();
+    let record = build_run_record(
+        &run_id,
+        &trimmed,
+        &question_id,
+        opts,
+        top_k,
+        &panel_source_ids,
+        orchestration::ttd::artifact::code_version(),
+        chrono::Utc::now().to_rfc3339(),
+    );
+    if let Err(e) = checkpoint_store.record_run_start(&record).await {
+        tracing::warn!(
+            run_id = %run_id,
+            error = %e,
+            "synthesize: record_run_start failed — run continues without resume metadata"
+        );
+    }
+
+    run_engine_and_finish(
+        ctx,
+        &trimmed,
+        opts,
+        run_id,
+        &question_id,
+        panel,
+        ResumeState::default(),
+        PreNotices {
+            fusion: fusion_notice,
+            topicality: topicality_notice,
+            seed: seed_notice,
+        },
+        handler_start,
+    )
+    .await
+}
+
+/// Pre-engine degradation notices carried into [`run_engine_and_finish`].
+///
+/// One field per notice kind because the final composition gives each kind its
+/// own prefix and drop rule (fusion is dropped entirely when the engine itself
+/// fails) — a flat list cannot reproduce the exact strings. Fresh runs fill
+/// these from the retrieval path; [`resume_review`] passes
+/// `PreNotices::default()` (the retrieval path is skipped on resume).
+#[derive(Default)]
+struct PreNotices {
+    /// Three-lane fusion degradation (partial sources).
+    fusion: Option<String>,
+    /// Topicality-gate outcome worth surfacing.
+    topicality: Option<String>,
+    /// Seed-paper resolution failures.
+    seed: Option<String>,
+}
+
+/// Cap on engine degradation reasons shown verbatim in the notice; the rest
+/// fold into "and N more" (a 5-trajectory stage can trip the same guard 5
+/// times — the notice must stay readable).
+const MAX_DEGRADATION_REASONS: usize = 3;
+
+/// Fold engine-internal degradation reasons (C3: bibliography write failures,
+/// resource-guard truncations) into the composed `(degraded, notice)` pair.
+///
+/// - Empty reasons: pass-through, nothing changes.
+/// - Non-empty reasons ALWAYS flip `degraded` to true. When a notice already
+///   leads, the reasons are appended with the house `"; "` separator (appended,
+///   never replacing); otherwise they start a fresh
+///   `"⚠ Synthesis degraded: ..."` notice.
+/// - Exact-duplicate reasons are dropped (order preserved); at most
+///   [`MAX_DEGRADATION_REASONS`] are shown, then `" (and N more)"`.
+fn fold_engine_degradations(
+    degraded: bool,
+    notice: String,
+    degradations: &[String],
+) -> (bool, String) {
+    if degradations.is_empty() {
+        return (degraded, notice);
+    }
+    let mut seen = std::collections::HashSet::new();
+    let unique: Vec<&String> = degradations.iter().filter(|r| seen.insert(r.as_str())).collect();
+    let mut folded = unique
+        .iter()
+        .take(MAX_DEGRADATION_REASONS)
+        .map(|r| r.as_str())
+        .collect::<Vec<_>>()
+        .join("; ");
+    if unique.len() > MAX_DEGRADATION_REASONS {
+        folded.push_str(&format!(" (and {} more)", unique.len() - MAX_DEGRADATION_REASONS));
+    }
+    if degraded {
+        (true, format!("{notice}; {folded}"))
+    } else {
+        (true, format!("⚠ Synthesis degraded: {folded}"))
+    }
+}
+
+/// Shared tail of a review run: full-text coverage accounting → stage
+/// retrievers → TTD engine → bibliography count → notice composition.
+/// Extracted verbatim from [`run_review`] so [`resume_review`] re-enters the
+/// engine identically; `resume` (B2) is the only lever that differs — fresh
+/// runs pass `ResumeState::default()`.
+///
+/// `run_id` and `question_id` are used verbatim (never regenerated). `top_k`
+/// is re-clamped here (idempotent for both callers: `run_review` clamps at
+/// entry, resume restores the stored clamped value).
+#[allow(clippy::too_many_arguments)]
+async fn run_engine_and_finish(
+    ctx: &LitContext,
+    question: &str,
+    opts: &ReviewOptions,
+    run_id: String,
+    question_id: &str,
+    panel: Vec<orchestration::adapter::ExpertResponse>,
+    resume: ResumeState,
+    pre_notices: PreNotices,
+    handler_start: std::time::Instant,
+) -> anyhow::Result<ReviewResult> {
+    let top_k = opts.top_k.clamp(1, TOP_K_HARD_CAP);
+    let profile = opts.profile;
+    let model = opts.model.as_str();
+    let executor = Arc::clone(&ctx.executor);
+    let live_policy = match opts.scope {
+        Scope::CorpusOnly => RetrievalPolicy::LocalOnly,
+        Scope::CorpusPlusWeb => RetrievalPolicy::Live,
+    };
+    let checkpoint_store = Arc::new(SqliteCheckpointStore::new((*ctx.lit_pool).clone()));
+    let PreNotices {
+        fusion: fusion_notice,
+        topicality: topicality_notice,
+        seed: seed_notice,
+    } = pre_notices;
+
     // Full-text coverage accounting (loud, F6).
     let mut n_fulltext = 0usize;
     for expert in &panel {
@@ -1617,17 +1854,18 @@ pub async fn run_review(
         Arc::new(SqliteBibliographyStore::new((*ctx.lit_pool).clone()));
 
     let run_prefix = &run_id[..run_id.len().min(8)];
-    let question_id = uuid::Uuid::new_v4().to_string();
     let config = EngineConfig::new(
         TTD_AGENT_ID,
         model,
         format!("espigue-{run_prefix}"),
         "r1",
-        &question_id,
+        question_id,
     )
     .with_run_id(run_id.clone())
-    .with_question(&trimmed)
+    .with_question(question)
     .with_stage_retrievers(live_retriever, local_retriever)
+    .with_checkpoint_store(checkpoint_store.clone())
+    .with_resume(resume)
     .with_profile(profile)
     .with_panel_refresher(Arc::new(LitPanelRefresher {
         pool: (*ctx.lit_pool).clone(),
@@ -1655,8 +1893,12 @@ pub async fn run_review(
         "ttd_perf: run_engine_with_bib"
     );
 
+    // C3: engine-internal degradations (bib-write failures, guard truncations)
+    // arrive on the success path — captured here, folded into the notice below.
+    let mut engine_degradations: Vec<String> = Vec::new();
     let (synthesis_yaml, graph_markdown, narrative, run_degraded, run_notice) = match engine_result {
         Ok(mut result) => {
+            engine_degradations = std::mem::take(&mut result.degradations);
             let graph_markdown = result.graph.to_markdown();
             let narrative = result.synthesis.narrative.clone();
             let yaml = match profile {
@@ -1688,8 +1930,18 @@ pub async fn run_review(
             (yaml, graph_markdown, narrative, false, String::new())
         }
         Err(e) => {
+            // B3: mark the run failed so it shows up as resumable. Loud but
+            // never fatal — the degraded result must still reach the caller.
+            if let Err(me) = checkpoint_store.mark_run_status(&run_id, "failed").await {
+                tracing::warn!(
+                    run_id = %run_id,
+                    error = %me,
+                    "synthesize: mark_run_status(failed) failed"
+                );
+            }
             let notice = format!(
-                "⚠ Synthesis degraded: engine run failed: {e}. Bibliography may be partial."
+                "⚠ Synthesis degraded: engine run failed: {e}. Bibliography may be partial. \
+                 Resume with: espigue resume {run_id}"
             );
             tracing::warn!(run_id = %run_id, error = %e, "synthesize: run_engine_with_bib failed");
             (String::new(), String::new(), String::new(), true, notice)
@@ -1723,6 +1975,9 @@ pub async fn run_review(
     } else {
         (false, String::new())
     };
+    // C3: engine-internal degradations flip the run degraded and append their
+    // reasons — never replacing the notices above.
+    let (degraded, notice) = fold_engine_degradations(degraded, notice, &engine_degradations);
     let (degraded, notice) = match coverage_notice {
         Some(c) if !degraded => (true, format!("⚠ Synthesis degraded: {c}")),
         Some(c) => (degraded, format!("{notice}; {c}")),
@@ -1767,6 +2022,224 @@ pub async fn run_review(
         degraded,
         notice,
     })
+}
+
+// ── Resume ─────────────────────────────────────────────────────────────────
+
+/// Rebuild [`ReviewOptions`] from a stored [`RunRecord`] (pure — unit-testable).
+///
+/// Inverts [`build_run_record`]: the stored strings parse back through the
+/// same strict parsers `run_review` accepts. Any unknown value bails — a
+/// resume must never silently run under different options.
+fn review_options_from_record(rec: &RunRecord) -> anyhow::Result<ReviewOptions> {
+    let profile = parse_prompt_profile(Some(&rec.profile))
+        .map_err(|e| anyhow::anyhow!("resume: stored profile invalid: {e}"))?;
+    let scope = match rec.scope.as_str() {
+        "corpus-only" => Scope::CorpusOnly,
+        "corpus+web" => Scope::CorpusPlusWeb,
+        other => anyhow::bail!(
+            "resume: unknown stored scope '{other}' (expected 'corpus-only' or 'corpus+web')"
+        ),
+    };
+    let seed_papers: Vec<String> = serde_json::from_str(&rec.seed_papers)
+        .map_err(|e| anyhow::anyhow!("resume: corrupt seed_papers JSON: {e}"))?;
+    Ok(ReviewOptions {
+        top_k: rec.top_k.clamp(1, TOP_K_HARD_CAP as i64) as usize,
+        profile,
+        model: rec.model.clone(),
+        merger_model: rec.merger_model.clone(),
+        scope,
+        seed_papers,
+        embedding_model: rec.embedding_model.clone(),
+        embedding_dim: rec.embedding_dim.max(0) as usize,
+    })
+}
+
+/// Decode one stage checkpoint payload. A payload that fails to deserialise
+/// is NEVER fatal: warn and treat the stage as absent (it re-runs). On
+/// success the checkpoint's `code_version` is pushed so the caller can note
+/// a mismatch with the current HEAD.
+fn decode_checkpoint<T: serde::de::DeserializeOwned>(
+    cp: Option<StageCheckpoint>,
+    stage: &str,
+    versions: &mut Vec<String>,
+) -> Option<T> {
+    let cp = cp?;
+    match serde_json::from_str::<T>(&cp.payload) {
+        Ok(v) => {
+            versions.push(cp.code_version);
+            Some(v)
+        }
+        Err(e) => {
+            tracing::warn!(
+                stage = %stage,
+                error = %e,
+                "resume: checkpoint payload failed to deserialise — treating stage as \
+                 absent (stage will re-run)"
+            );
+            None
+        }
+    }
+}
+
+/// Assemble a [`ResumeState`] from the three stage checkpoints (pure —
+/// unit-testable). Payload formats per B2: graph/synthesis are JSON objects;
+/// narrative is a JSON-quoted string. Returns the state plus the
+/// `code_version`s of every checkpoint actually restored.
+fn resume_state_from_checkpoints(
+    graph: Option<StageCheckpoint>,
+    synthesis: Option<StageCheckpoint>,
+    narrative: Option<StageCheckpoint>,
+) -> (ResumeState, Vec<String>) {
+    let mut versions = Vec::new();
+    let graph = decode_checkpoint::<ArgumentationGraph>(graph, "graph", &mut versions);
+    let synthesis = decode_checkpoint::<SynthesisArtifact>(synthesis, "synthesis", &mut versions);
+    let narrative = decode_checkpoint::<String>(narrative, "narrative", &mut versions);
+    (ResumeState { graph, synthesis, narrative }, versions)
+}
+
+/// Provenance note when restored checkpoints were written at a different
+/// code_version than the current HEAD (pure — unit-testable). `None` when
+/// every restored checkpoint matches. NON-degraded: resuming across a code
+/// change is allowed, it just gets named in the notice.
+fn code_version_mismatch_note(checkpoint_versions: &[String], current: &str) -> Option<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mismatched: Vec<&str> = checkpoint_versions
+        .iter()
+        .map(|v| v.as_str())
+        .filter(|v| *v != current && seen.insert(*v))
+        .collect();
+    if mismatched.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "resumed from checkpoints written at code_version {}; emit stamps current HEAD \
+             {current}",
+            mismatched.join(", ")
+        ))
+    }
+}
+
+/// Load one stage checkpoint, degrading a store read failure to "absent"
+/// with a warning — a broken checkpoint row must never block a resume.
+async fn load_stage_lenient(
+    store: &SqliteCheckpointStore,
+    run_id: &str,
+    stage: &str,
+) -> Option<StageCheckpoint> {
+    match store.load_stage(run_id, stage).await {
+        Ok(cp) => cp,
+        Err(e) => {
+            tracing::warn!(
+                run_id = %run_id,
+                stage = %stage,
+                error = %e,
+                "resume: checkpoint load failed — treating stage as absent"
+            );
+            None
+        }
+    }
+}
+
+/// Resume a failed run from its `synthesis_runs` record and stage checkpoints.
+///
+/// Restores the run's identity (`run_id`/`question_id` verbatim — never
+/// regenerated), options, and panel, then re-enters the engine via the same
+/// tail as [`run_review`] with completed stages skipped ([`ResumeState`]).
+/// Marks nothing complete — the caller finalises via [`finalize_run`] after
+/// outputs are safely on disk, exactly as for a fresh run. A resumed run that
+/// fails again returns the same degraded result with the same resume hint.
+pub async fn resume_review(run_id: &str, ctx: &LitContext) -> anyhow::Result<ReviewResult> {
+    let handler_start = std::time::Instant::now();
+    let store = SqliteCheckpointStore::new((*ctx.lit_pool).clone());
+
+    let record = store
+        .load_run(run_id)
+        .await
+        .map_err(|e| anyhow::anyhow!("resume: failed to read synthesis_runs for '{run_id}': {e}"))?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "resume: unknown run_id '{run_id}' — no synthesis_runs row records it"
+            )
+        })?;
+    if record.status == "complete" {
+        anyhow::bail!("resume: run '{run_id}' already completed — nothing to resume");
+    }
+
+    let opts = review_options_from_record(&record)?;
+
+    let panel_ids: Vec<String> = serde_json::from_str(&record.panel_source_ids)
+        .map_err(|e| anyhow::anyhow!("resume: corrupt panel_source_ids for '{run_id}': {e}"))?;
+    if panel_ids.is_empty() {
+        anyhow::bail!(
+            "resume: run '{run_id}' recorded no panel source ids — cannot rebuild the panel"
+        );
+    }
+    let panel = panel_from_source_ids(ctx.lit_pool.as_ref(), &panel_ids)
+        .await
+        .map_err(|e| anyhow::anyhow!("resume: panel rebuild failed for '{run_id}': {e}"))?;
+    if panel.is_empty() {
+        anyhow::bail!(
+            "resume: none of the {} recorded panel ids resolve to local text — cannot \
+             ground a resumed synthesis for '{run_id}'",
+            panel_ids.len()
+        );
+    }
+
+    let graph_cp = load_stage_lenient(&store, run_id, "graph").await;
+    let synthesis_cp = load_stage_lenient(&store, run_id, "synthesis").await;
+    let narrative_cp = load_stage_lenient(&store, run_id, "narrative").await;
+    let (resume, checkpoint_versions) =
+        resume_state_from_checkpoints(graph_cp, synthesis_cp, narrative_cp);
+    let version_note = code_version_mismatch_note(
+        &checkpoint_versions,
+        &orchestration::ttd::artifact::code_version(),
+    );
+
+    tracing::info!(
+        run_id = %run_id,
+        resume = ?resume,
+        n_panel = panel.len(),
+        n_panel_recorded = panel_ids.len(),
+        "resume: run restored — re-entering engine with completed stages skipped"
+    );
+
+    let mut result = run_engine_and_finish(
+        ctx,
+        &record.question,
+        &opts,
+        record.run_id.clone(),
+        &record.question_id,
+        panel,
+        resume,
+        PreNotices::default(),
+        handler_start,
+    )
+    .await?;
+
+    if let Some(note) = version_note {
+        result.notice = if result.notice.is_empty() {
+            note
+        } else {
+            format!("{}; {note}", result.notice)
+        };
+    }
+    Ok(result)
+}
+
+/// Finalise a successful run: mark `synthesis_runs.status = "complete"` and
+/// delete its stage checkpoints.
+///
+/// Deliberately NOT called by [`run_review`]: the caller writes
+/// synthesis.yaml/graph.md AFTER the run returns, so the caller finalises only
+/// once those files are safely on disk. Finalising earlier would leave a crash
+/// between engine success and file write marked "complete" with its
+/// checkpoints deleted — unresumable and outputless.
+pub async fn finalize_run(ctx: &LitContext, run_id: &str) -> anyhow::Result<()> {
+    let store = SqliteCheckpointStore::new((*ctx.lit_pool).clone());
+    store.mark_run_status(run_id, "complete").await?;
+    store.delete_checkpoints(run_id).await?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1818,6 +2291,72 @@ mod tests {
     }
 
     #[test]
+    fn prompt_profile_str_roundtrips_through_parser() {
+        for profile in [
+            PromptProfile::V1Delphi,
+            PromptProfile::V2LitReview,
+            PromptProfile::V3LitReviewLong,
+        ] {
+            assert_eq!(
+                parse_prompt_profile(Some(prompt_profile_str(profile))).unwrap(),
+                profile,
+                "prompt_profile_str({profile:?}) must parse back"
+            );
+        }
+    }
+
+    #[test]
+    fn build_run_record_serialises_options_and_panel() {
+        let opts = ReviewOptions {
+            top_k: 999, // deliberately unclamped: build_run_record takes the effective value
+            profile: PromptProfile::V2LitReview,
+            model: "test/model".into(),
+            merger_model: Some("test/merger".into()),
+            scope: Scope::CorpusOnly,
+            seed_papers: vec!["2401.00001".into(), "10.1000/x".into()],
+            embedding_model: "test/embed".into(),
+            embedding_dim: 42,
+        };
+        let panel_ids = vec!["p1".to_string(), "p2".to_string()];
+        let rec = build_run_record(
+            "run-1",
+            "why?",
+            "q-1",
+            &opts,
+            50,
+            &panel_ids,
+            "abc1234".into(),
+            "2026-07-12T00:00:00+00:00".into(),
+        );
+        assert_eq!(rec.run_id, "run-1");
+        assert_eq!(rec.question, "why?");
+        assert_eq!(rec.question_id, "q-1");
+        assert_eq!(rec.profile, "v2/lit-review");
+        assert_eq!(rec.model, "test/model");
+        assert_eq!(rec.merger_model.as_deref(), Some("test/merger"));
+        assert_eq!(rec.top_k, 50, "record carries the clamped top_k, not opts.top_k");
+        assert_eq!(rec.scope, "corpus-only");
+        assert_eq!(rec.seed_papers, r#"["2401.00001","10.1000/x"]"#);
+        assert_eq!(rec.embedding_model, "test/embed");
+        assert_eq!(rec.embedding_dim, 42);
+        assert_eq!(rec.panel_source_ids, r#"["p1","p2"]"#);
+        assert_eq!(rec.code_version, "abc1234");
+        assert_eq!(rec.status, "running");
+        assert_eq!(rec.started_at, "2026-07-12T00:00:00+00:00");
+        assert_eq!(rec.updated_at, rec.started_at);
+
+        // Stored strings must parse back through the run_review entry parsers.
+        assert_eq!(
+            parse_prompt_profile(Some(&rec.profile)).unwrap(),
+            PromptProfile::V2LitReview
+        );
+        let seeds: Vec<String> = serde_json::from_str(&rec.seed_papers).unwrap();
+        assert_eq!(seeds, opts.seed_papers);
+        let ids: Vec<String> = serde_json::from_str(&rec.panel_source_ids).unwrap();
+        assert_eq!(ids, panel_ids);
+    }
+
+    #[test]
     fn fold_reason_joins_with_separator() {
         assert_eq!(
             fold_reason(Some("a".into()), Some("b".into())),
@@ -1826,5 +2365,221 @@ mod tests {
         assert_eq!(fold_reason(Some("a".into()), None), Some("a".into()));
         assert_eq!(fold_reason(None, Some("b".into())), Some("b".into()));
         assert_eq!(fold_reason(None, None), None);
+    }
+
+    // ── Resume (B4) ────────────────────────────────────────────────────────
+
+    /// RunRecord → ReviewOptions must invert build_run_record: a resumed run
+    /// re-enters the engine under exactly the recorded options.
+    #[test]
+    fn review_options_roundtrip_through_run_record() {
+        let opts = ReviewOptions {
+            top_k: 25,
+            profile: PromptProfile::V2LitReview,
+            model: "test/model".into(),
+            merger_model: Some("test/merger".into()),
+            scope: Scope::CorpusOnly,
+            seed_papers: vec!["2401.00001".into(), "10.1000/x".into()],
+            embedding_model: "test/embed".into(),
+            embedding_dim: 42,
+        };
+        let rec = build_run_record(
+            "run-1",
+            "why?",
+            "q-1",
+            &opts,
+            25,
+            &["p1".to_string()],
+            "abc1234".into(),
+            "2026-07-12T00:00:00+00:00".into(),
+        );
+        let restored = review_options_from_record(&rec).unwrap();
+        assert_eq!(restored.top_k, opts.top_k);
+        assert_eq!(restored.profile, opts.profile);
+        assert_eq!(restored.model, opts.model);
+        assert_eq!(restored.merger_model, opts.merger_model);
+        assert_eq!(restored.scope, opts.scope);
+        assert_eq!(restored.seed_papers, opts.seed_papers);
+        assert_eq!(restored.embedding_model, opts.embedding_model);
+        assert_eq!(restored.embedding_dim, opts.embedding_dim);
+
+        // corpus+web is the other canonical scope string.
+        let rec2 = build_run_record(
+            "run-2",
+            "why?",
+            "q-2",
+            &ReviewOptions { scope: Scope::CorpusPlusWeb, ..ReviewOptions::default() },
+            10,
+            &[],
+            "abc1234".into(),
+            "2026-07-12T00:00:00+00:00".into(),
+        );
+        assert_eq!(
+            review_options_from_record(&rec2).unwrap().scope,
+            Scope::CorpusPlusWeb
+        );
+    }
+
+    /// Unknown stored values must bail, never silently run under different
+    /// options.
+    #[test]
+    fn review_options_from_record_rejects_corrupt_fields() {
+        let base = build_run_record(
+            "run-1",
+            "why?",
+            "q-1",
+            &ReviewOptions::default(),
+            10,
+            &[],
+            "abc1234".into(),
+            "2026-07-12T00:00:00+00:00".into(),
+        );
+
+        let mut bad_scope = base.clone();
+        bad_scope.scope = "corpus only".into();
+        assert!(review_options_from_record(&bad_scope).is_err());
+
+        let mut bad_profile = base.clone();
+        bad_profile.profile = "v9/bogus".into();
+        assert!(review_options_from_record(&bad_profile).is_err());
+
+        let mut bad_seeds = base;
+        bad_seeds.seed_papers = "{not json".into();
+        assert!(review_options_from_record(&bad_seeds).is_err());
+    }
+
+    /// Test-fixture StageCheckpoint.
+    fn cp(stage: &str, payload: String, code_version: &str) -> StageCheckpoint {
+        StageCheckpoint {
+            run_id: "run-1".into(),
+            stage: stage.into(),
+            payload,
+            format: "json".into(),
+            code_version: code_version.into(),
+            created_at: "2026-07-12T00:00:00+00:00".into(),
+        }
+    }
+
+    /// ResumeState assembly: graph/synthesis decode as JSON objects, the
+    /// narrative decodes as a JSON-quoted string, and the restored
+    /// checkpoints' code_versions are collected.
+    #[test]
+    fn resume_state_assembles_from_checkpoint_payloads() {
+        let graph = ArgumentationGraph::new("s1", "r1", "q1", "m", "p1");
+        let graph_json = serde_json::to_string(&graph).unwrap();
+        // Narrative payloads are serde_json strings (quoted), per B2.
+        let narrative_json = serde_json::to_string(&"The narrative.".to_string()).unwrap();
+        assert!(narrative_json.starts_with('"'), "fixture must be a quoted JSON string");
+
+        let (state, versions) = resume_state_from_checkpoints(
+            Some(cp("graph", graph_json, "aaa1111")),
+            None,
+            Some(cp("narrative", narrative_json, "bbb2222")),
+        );
+        assert_eq!(state.graph.as_ref().map(|g| g.question_id.as_str()), Some("q1"));
+        assert!(state.synthesis.is_none());
+        assert_eq!(state.narrative.as_deref(), Some("The narrative."));
+        assert_eq!(versions, vec!["aaa1111".to_string(), "bbb2222".to_string()]);
+    }
+
+    /// A corrupt payload is treated as absent (stage re-runs) and contributes
+    /// no code_version — never fatal.
+    #[test]
+    fn resume_state_treats_corrupt_payload_as_absent() {
+        let (state, versions) = resume_state_from_checkpoints(
+            Some(cp("graph", "{definitely not json".into(), "aaa1111")),
+            Some(cp("synthesis", "[3, 4]".into(), "bbb2222")), // valid JSON, wrong shape
+            None,
+        );
+        assert!(state.graph.is_none());
+        assert!(state.synthesis.is_none());
+        assert!(state.narrative.is_none());
+        assert!(versions.is_empty(), "corrupt checkpoints must not report a code_version");
+    }
+
+    /// code_version note: silent on match, named on mismatch, distinct
+    /// versions deduped in first-seen order.
+    #[test]
+    fn code_version_mismatch_note_fires_only_on_mismatch() {
+        let same = vec!["head1".to_string(), "head1".to_string()];
+        assert_eq!(code_version_mismatch_note(&same, "head1"), None);
+        assert_eq!(code_version_mismatch_note(&[], "head1"), None);
+
+        let mixed = vec!["old1".to_string(), "head1".to_string(), "old1".to_string()];
+        assert_eq!(
+            code_version_mismatch_note(&mixed, "head1").as_deref(),
+            Some("resumed from checkpoints written at code_version old1; emit stamps current HEAD head1")
+        );
+
+        let two_olds = vec!["old1".to_string(), "old2".to_string()];
+        assert_eq!(
+            code_version_mismatch_note(&two_olds, "head1").as_deref(),
+            Some(
+                "resumed from checkpoints written at code_version old1, old2; emit stamps \
+                 current HEAD head1"
+            )
+        );
+    }
+
+    // ── C3: engine degradations fold into degraded + notice ──────────────────
+
+    /// A result built from an engine run WITH degradations must come out
+    /// degraded, with the reason in the notice under the house prefix.
+    #[test]
+    fn fold_engine_degradations_flips_degraded_and_prefixes() {
+        let reason = "bibliography write failed at stage graph step 0: DB locked".to_string();
+        let (degraded, notice) =
+            fold_engine_degradations(false, String::new(), &[reason.clone()]);
+        assert!(degraded, "C3: engine degradations must set degraded=true");
+        assert!(
+            notice.starts_with("⚠ Synthesis degraded: "),
+            "C3: notice must lead with the house prefix, got {notice:?}"
+        );
+        assert!(notice.contains(&reason), "C3: notice must carry the reason verbatim");
+    }
+
+    /// When an earlier notice already leads, degradation reasons append with
+    /// the house "; " separator — never replacing it. Duplicates fold away and
+    /// the shown reasons cap at MAX_DEGRADATION_REASONS + "and N more".
+    #[test]
+    fn fold_engine_degradations_appends_dedups_and_caps() {
+        let reasons: Vec<String> = vec![
+            "stage narrative trajectory 0 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 0 truncated by wall-clock guard".into(), // dup — dropped
+            "stage narrative trajectory 1 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 2 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 3 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 4 truncated by wall-clock guard".into(),
+        ];
+        let prior = "⚠ Synthesis degraded (partial sources): arXiv lane down".to_string();
+        let (degraded, notice) = fold_engine_degradations(true, prior.clone(), &reasons);
+        assert!(degraded);
+        assert!(
+            notice.starts_with(&format!("{prior}; ")),
+            "C3: reasons are appended, never replacing the earlier notice: {notice:?}"
+        );
+        assert!(notice.contains("trajectory 0"));
+        assert!(
+            notice.contains("(and 2 more)"),
+            "C3: 5 unique reasons cap at 3 shown + 'and 2 more', got {notice:?}"
+        );
+        assert!(
+            !notice.contains("trajectory 4"),
+            "C3: reasons past the cap must fold into the count, got {notice:?}"
+        );
+    }
+
+    /// No degradations → pass-through: a clean run stays clean.
+    #[test]
+    fn fold_engine_degradations_passthrough_when_clean() {
+        let (degraded, notice) = fold_engine_degradations(false, String::new(), &[]);
+        assert!(!degraded);
+        assert!(notice.is_empty());
+
+        // Existing degraded state passes through untouched too.
+        let (degraded, notice) =
+            fold_engine_degradations(true, "⚠ Synthesis degraded: x".into(), &[]);
+        assert!(degraded);
+        assert_eq!(notice, "⚠ Synthesis degraded: x");
     }
 }

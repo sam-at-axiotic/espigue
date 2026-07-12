@@ -29,6 +29,7 @@
 //! `arxiv_id` path segment derives from upstream Atom data; caller-supplied
 //! full URLs are never accepted.
 
+use crate::http_cap::{read_text_capped, API_BODY_MAX_BYTES, LARGE_BODY_MAX_BYTES};
 use base::error::{AlzinaError, AlzinaResult, SearchDetail};
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
@@ -173,7 +174,9 @@ impl ArxivClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, API_BODY_MAX_BYTES, "arxiv Atom")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             tracing::warn!(status = %status, body = %body_text, "arxiv API non-2xx response");
             let reason = match status.as_u16() {
                 429 => "arxiv rate-limited; retry later".to_string(),
@@ -183,7 +186,7 @@ impl ArxivClient {
             return Err(search_err(format!("arxiv HTTP {status}: {body_text}"), reason));
         }
 
-        let xml = resp.text().await.map_err(|e| {
+        let xml = read_text_capped(resp, API_BODY_MAX_BYTES, "arxiv Atom").await.map_err(|e| {
             search_err(
                 format!("arxiv Atom body read failed: {e}"),
                 format!("arxiv Atom response unreadable: {e}"),
@@ -227,7 +230,9 @@ impl ArxivClient {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, API_BODY_MAX_BYTES, "arxiv id_list")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             let reason = match status.as_u16() {
                 429 => "arxiv rate-limited; retry later".to_string(),
                 _ => format!("arxiv returned {status}"),
@@ -238,7 +243,7 @@ impl ArxivClient {
             ));
         }
 
-        let xml = resp.text().await.map_err(|e| {
+        let xml = read_text_capped(resp, API_BODY_MAX_BYTES, "arxiv id_list").await.map_err(|e| {
             search_err(
                 format!("arxiv id_list body read failed: {e}"),
                 format!("arxiv Atom response unreadable: {e}"),
@@ -297,7 +302,9 @@ impl ArxivClient {
         }
 
         if !status.is_success() {
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, LARGE_BODY_MAX_BYTES, "ar5iv")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             tracing::warn!(arxiv_id = %arxiv_id, status = %status, body = %body_text, "ar5iv non-2xx response");
             let reason = format!("ar5iv returned {status} for {arxiv_id}");
             return Err(search_err(
@@ -306,7 +313,7 @@ impl ArxivClient {
             ));
         }
 
-        let html = resp.text().await.map_err(|e| {
+        let html = read_text_capped(resp, LARGE_BODY_MAX_BYTES, "ar5iv").await.map_err(|e| {
             search_err(
                 format!("ar5iv body read failed: {e}"),
                 format!("ar5iv HTML unreadable: {e}"),
@@ -646,6 +653,36 @@ mod tests {
             AlzinaError::Search(d) => {
                 assert!(d.degraded);
                 assert!(d.degradation_reason.is_some());
+            }
+            other => panic!("expected Search error, got {other:?}"),
+        }
+    }
+
+    // ── Test 5b: ar5iv over-cap body degrades loudly (T-lq4-02) ────────────
+
+    #[tokio::test]
+    async fn fulltext_over_cap_body_degrades_loudly() {
+        let server = MockServer::start().await;
+        let huge = vec![b'a'; LARGE_BODY_MAX_BYTES + 1];
+        Mock::given(method("GET"))
+            .and(path("/abs/2105.14103"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(huge))
+            .mount(&server)
+            .await;
+
+        let client = ArxivClient::new(cfg_for(&server)).expect("builds");
+        let err = client
+            .fetch_fulltext("2105.14103", "fallback abstract")
+            .await
+            .expect_err("over-cap body must error, not buffer");
+        match err {
+            AlzinaError::Search(d) => {
+                assert!(d.degraded);
+                let reason = d.degradation_reason.expect("has reason");
+                assert!(
+                    reason.contains(&LARGE_BODY_MAX_BYTES.to_string()),
+                    "reason names the cap: {reason}"
+                );
             }
             other => panic!("expected Search error, got {other:?}"),
         }

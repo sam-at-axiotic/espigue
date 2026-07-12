@@ -294,6 +294,68 @@ pub async fn migrate(pool: &SqlitePool, dimensions: usize) -> AlzinaResult<()> {
         )
     })?;
 
+    // synthesis_runs — one row per synthesis run, restart-survivable metadata.
+    //
+    // Checkpoint/resume foundation (harden/checkpoint-resume B1): records
+    // everything needed to re-run a stage under identical settings — question,
+    // profile, models, embedding config, panel — plus a status lifecycle
+    // (running | complete | failed). Rows are kept forever as a run ledger;
+    // only `run_checkpoints` rows are deleted when a run completes.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS synthesis_runs (\
+            run_id           TEXT PRIMARY KEY,\
+            question         TEXT NOT NULL,\
+            question_id      TEXT NOT NULL,\
+            profile          TEXT NOT NULL,\
+            model            TEXT NOT NULL,\
+            merger_model     TEXT,\
+            top_k            INTEGER NOT NULL,\
+            scope            TEXT NOT NULL,\
+            seed_papers      TEXT NOT NULL DEFAULT '[]',\
+            embedding_model  TEXT NOT NULL,\
+            embedding_dim    INTEGER NOT NULL,\
+            panel_source_ids TEXT NOT NULL DEFAULT '[]',\
+            code_version     TEXT NOT NULL,\
+            status           TEXT NOT NULL DEFAULT 'running',\
+            started_at       TEXT NOT NULL,\
+            updated_at       TEXT NOT NULL\
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        search_err(
+            format!("synthesis_runs: {e}"),
+            format!("synthesis_runs create: {e}"),
+        )
+    })?;
+
+    // run_checkpoints — latest stage artifact per (run_id, stage).
+    //
+    // PRIMARY KEY (run_id, stage) + INSERT OR REPLACE means latest-wins with
+    // no history: a resumed run overwrites its own stage artifact. Payload is
+    // a JSON-serialised stage artifact; `code_version` lets resume refuse a
+    // checkpoint written by different code.
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS run_checkpoints (\
+            run_id       TEXT NOT NULL,\
+            stage        TEXT NOT NULL,\
+            payload      TEXT NOT NULL,\
+            format       TEXT NOT NULL DEFAULT 'json',\
+            code_version TEXT NOT NULL,\
+            created_at   TEXT NOT NULL,\
+            PRIMARY KEY (run_id, stage)\
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| {
+        search_err(
+            format!("run_checkpoints: {e}"),
+            format!("run_checkpoints create: {e}"),
+        )
+    })?;
+
     // s2_cache — response cache for S2 graph API calls.
     //
     // Key scheme mirrors clawd S2Cache (semantic_scholar.py:96-144):

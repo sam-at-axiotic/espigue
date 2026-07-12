@@ -37,6 +37,17 @@ pub mod sqlite_vec;
 pub mod bib_store;
 pub use bib_store::{BibEntry, BibliographyStore, NoopBibliographyStore, SqliteBibliographyStore};
 
+// ── Checkpoint/resume B1: stage-level checkpoint store ────────────────────────
+// `CheckpointStore` persists run metadata (`synthesis_runs`, kept forever) and
+// the latest per-stage artifact (`run_checkpoints`, INSERT OR REPLACE,
+// deleted on success) so a killed synthesis run can resume at the last
+// completed stage. `NoopCheckpointStore` is the test/no-checkpointing
+// implementation; `SqliteCheckpointStore` is the production implementation.
+pub mod checkpoint_store;
+pub use checkpoint_store::{
+    CheckpointStore, NoopCheckpointStore, RunRecord, SqliteCheckpointStore, StageCheckpoint,
+};
+
 // ── Phase 21 module registration (Plan 21-01) ─────────────────────────
 // `lit_schema` creates the physically separate literature DB migration:
 // `papers` (provenance), `lit_vec0` (1024-dim vec0), `lit_chunks`
@@ -97,6 +108,11 @@ pub use lit_intake::{
     persist_s2_abstract, persist_s2_result, promote_arxiv_fulltext, promote_pdf_fulltext,
     s2_client_for_lit,
 };
+
+// ── Capped HTTP body reads (T-lq4-02 extension) ──────────────────────────────
+// Bounded-read helpers shared by every non-PDF network reader in this crate
+// (arxiv/ar5iv, S2, Jina embed/rerank). Crate-private — a DoS guard, not API.
+mod http_cap;
 
 // ── F10 PDF fetch + pdftotext extraction ─────────────────────────────────────
 // `pdf_fetch` provides HTTP PDF byte fetching (scheme allowlist, size cap,

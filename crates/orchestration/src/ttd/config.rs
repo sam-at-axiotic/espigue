@@ -14,6 +14,54 @@
 /// see `EngineConfig::with_profile`).
 pub const V3_MAX_STAGE_SECONDS: u64 = 7200;
 
+/// Shared sink for engine-internal degradation reasons (item C3).
+///
+/// Threaded from `EngineConfig` into the three TTD stage machines via
+/// `TtdConfig` (the builders clone the config, and clones share the same
+/// underlying buffer). `run.rs` pushes a reason whenever a run degrades
+/// without erroring — a bibliography write failure, or a resource guard
+/// truncating a trajectory (break-and-keep-best). `run_engine_with_bib`
+/// drains the sink into `EngineResult.degradations` so callers can surface
+/// the loss instead of reporting silent success.
+///
+/// `push` takes a std `Mutex` for a single `Vec::push` — never held across
+/// an await, never blocking long. A poisoned mutex is ignored: degradation
+/// reporting must never panic or kill a run.
+#[derive(Clone, Default)]
+pub struct DegradationSink(std::sync::Arc<std::sync::Mutex<Vec<String>>>);
+
+impl DegradationSink {
+    /// Create a fresh, empty sink.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record one degradation reason.
+    pub fn push(&self, reason: String) {
+        if let Ok(mut reasons) = self.0.lock() {
+            reasons.push(reason);
+        }
+    }
+
+    /// Take all recorded reasons, leaving the sink empty.
+    ///
+    /// Draining (rather than snapshotting) means a reused config never
+    /// double-reports a prior run's degradations.
+    pub fn drain(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .map(|mut reasons| std::mem::take(&mut *reasons))
+            .unwrap_or_default()
+    }
+}
+
+impl std::fmt::Debug for DegradationSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = self.0.lock().map(|r| r.len()).unwrap_or(0);
+        write!(f, "DegradationSink({n} reasons)")
+    }
+}
+
 /// Configuration for the native TTD engine.
 ///
 /// All fields carry the consensus `TTDConfig` defaults from runner.py:67-86.
@@ -107,6 +155,15 @@ pub struct TtdConfig {
     /// byte-identical to the pre-question behaviour: each call site falls back
     /// to its previous placeholder string.
     pub question: String,
+
+    // --- harden/checkpoint-resume C3 addition ---
+    /// Sink for engine-internal degradation reasons (see [`DegradationSink`]).
+    ///
+    /// `run.rs` pushes on bibliography write failure and on each resource-guard
+    /// truncation; `run_engine_with_bib` drains it into
+    /// `EngineResult.degradations`. Clones share one buffer, so the per-stage
+    /// config clones in the engine builders all report into the same sink.
+    pub degradation_sink: DegradationSink,
 }
 
 impl Default for TtdConfig {
@@ -132,6 +189,7 @@ impl Default for TtdConfig {
             plan_mode: crate::ttd::plan::PlanMode::Disabled, // Phase 1 opt-in only
             resolve_without_retrieval: false, // Phase P opt-in only — default byte-stable
             question: String::new(), // empty → placeholder fallbacks, byte-stable
+            degradation_sink: DegradationSink::new(), // C3: fresh empty sink per config
         }
     }
 }

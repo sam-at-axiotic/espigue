@@ -19,6 +19,7 @@
 //! .. })` and logs at `tracing::warn!`. The caller keeps the un-reranked hits
 //! and folds the reason — a reranker outage must never drop a source silently.
 
+use crate::http_cap::{read_body_capped, read_text_capped, API_BODY_MAX_BYTES};
 use base::error::{AlzinaError, AlzinaResult, SearchDetail};
 
 /// Default Jina API base URL. Tests override via [`JinaRerankService::with_base_url`].
@@ -131,7 +132,9 @@ impl JinaRerankService {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, API_BODY_MAX_BYTES, "Jina rerank")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             tracing::warn!(status = %status, body = %body_text, "Jina rerank non-2xx response");
             let reason = match status.as_u16() {
                 429 => "Jina rerank rate-limited (429)".to_string(),
@@ -145,7 +148,17 @@ impl JinaRerankService {
             }));
         }
 
-        let parsed: RerankResponse = resp.json().await.map_err(|e| {
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "Jina rerank")
+            .await
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Jina rerank response body read failed");
+                AlzinaError::Search(SearchDetail {
+                    message: format!("Jina rerank response body read failed: {e}"),
+                    degraded: true,
+                    degradation_reason: Some(format!("Jina rerank response unreadable: {e}")),
+                })
+            })?;
+        let parsed: RerankResponse = serde_json::from_slice(&raw_body).map_err(|e| {
             tracing::warn!(error = %e, "Jina rerank response JSON decode failed");
             AlzinaError::Search(SearchDetail {
                 message: format!("Jina rerank response decode failed: {e}"),

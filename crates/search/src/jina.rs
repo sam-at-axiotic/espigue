@@ -27,6 +27,7 @@
 //! `tracing::warn!`. Rate limiting is NOT done in-client — callers decide
 //! backoff policy on top of the surfaced 429.
 
+use crate::http_cap::{read_body_capped, read_text_capped, LARGE_BODY_MAX_BYTES};
 use base::error::{AlzinaError, AlzinaResult, SearchDetail};
 use base::search::{EmbeddingService, EmbeddingTask};
 use async_trait::async_trait;
@@ -204,7 +205,9 @@ impl JinaEmbeddingService {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, LARGE_BODY_MAX_BYTES, "Jina embeddings")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             tracing::warn!(status = %status, body = %body_text, "Jina API non-2xx response");
             let reason = match status.as_u16() {
                 429 => "Jina rate-limited (429), falling back to FTS5".to_string(),
@@ -220,7 +223,19 @@ impl JinaEmbeddingService {
             }));
         }
 
-        let parsed: JinaResponse = resp.json().await.map_err(|e| {
+        let raw_body = read_body_capped(resp, LARGE_BODY_MAX_BYTES, "Jina embeddings")
+            .await
+            .map_err(|e| {
+                tracing::warn!(error = %e, "Jina API response body read failed");
+                AlzinaError::Search(SearchDetail {
+                    message: format!("Jina response body read failed: {e}"),
+                    degraded: true,
+                    degradation_reason: Some(format!(
+                        "Jina response unreadable: {e}, falling back to FTS5"
+                    )),
+                })
+            })?;
+        let parsed: JinaResponse = serde_json::from_slice(&raw_body).map_err(|e| {
             tracing::warn!(error = %e, "Jina API response JSON decode failed");
             AlzinaError::Search(SearchDetail {
                 message: format!("Jina response decode failed: {e}"),

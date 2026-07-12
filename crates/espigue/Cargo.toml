@@ -32,3 +32,4 @@ anyhow = "1"
 [dev-dependencies]
 wiremock = "0.6"
 tokio = { workspace = true, features = ["full", "test-util"] }
+tempfile = { workspace = true }

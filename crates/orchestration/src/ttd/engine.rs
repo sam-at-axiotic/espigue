@@ -85,6 +85,41 @@ pub trait PanelRefresher: Send + Sync {
     async fn refresh(&self, source_ids: &[String]) -> Result<Vec<ExpertResponse>, String>;
 }
 
+/// Restored stage artifacts for resuming a checkpointed run
+/// (harden/checkpoint-resume B2).
+///
+/// Each `Some` field short-circuits the corresponding engine work in
+/// `run_engine_with_bib`:
+/// - `graph`: skips Stage 1 AND the DB graph re-verify (the checkpoint was
+///   saved after re-verify ran, so its statuses are already final).
+/// - `synthesis`: skips the stage-2 panel refresh, Stage 2, the F14 logging
+///   block, and post-process.
+/// - `narrative`: skips the plan tournament (the plan only feeds Stage 3)
+///   and Stage 3.
+///
+/// Item B4 builds this from `CheckpointStore::load_stage` payloads.
+#[derive(Clone, Default)]
+pub struct ResumeState {
+    /// Stage-1 artifact restored from the "graph" checkpoint.
+    pub graph: Option<ArgumentationGraph>,
+    /// Stage-2 artifact restored from the "synthesis" checkpoint.
+    pub synthesis: Option<SynthesisArtifact>,
+    /// Stage-3 narrative restored from the "narrative" checkpoint.
+    pub narrative: Option<String>,
+}
+
+impl std::fmt::Debug for ResumeState {
+    /// Presence-only debug: the artifacts are large, so log which stages are
+    /// populated rather than their contents.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResumeState")
+            .field("graph", &self.graph.is_some())
+            .field("synthesis", &self.synthesis.is_some())
+            .field("narrative", &self.narrative.is_some())
+            .finish()
+    }
+}
+
 /// Configuration for the three-stage TTD engine run.
 ///
 /// `Arc<dyn Retriever>` does not implement `Debug`, so this struct implements
@@ -137,6 +172,15 @@ pub struct EngineConfig {
     /// sets this to a provider-shaped Opus slug (`anthropic/...`), since
     /// OpenRouter rejects the bare daemon slug with a 400.
     pub merger_model: Option<String>,
+    /// Optional stage-level checkpoint store (harden/checkpoint-resume B2).
+    /// `None` (default) disables checkpointing — byte-identical to pre-B2
+    /// behaviour. Saves are best-effort: any failure logs a warning and the
+    /// run continues (see `save_checkpoint`). Set via `with_checkpoint_store`.
+    pub checkpoint_store: Option<Arc<dyn search::CheckpointStore>>,
+    /// Restored stage artifacts to resume from (B2). Default: empty (fresh
+    /// run, no stage skipped). A populated stage skips the corresponding
+    /// engine work — see [`ResumeState`]. Set via `with_resume`.
+    pub resume: ResumeState,
 }
 
 impl std::fmt::Debug for EngineConfig {
@@ -154,6 +198,11 @@ impl std::fmt::Debug for EngineConfig {
             .field("profile", &self.profile)
             .field("panel_refresher", &self.panel_refresher.as_ref().map(|_| "<Arc<dyn PanelRefresher>>"))
             .field("merger_model", &self.merger_model)
+            .field(
+                "checkpoint_store",
+                &self.checkpoint_store.as_ref().map(|_| "<Arc<dyn CheckpointStore>>"),
+            )
+            .field("resume", &self.resume)
             .finish()
     }
 }
@@ -179,6 +228,8 @@ impl EngineConfig {
             profile: PromptProfile::V1Delphi,   // default: byte-identical to pre-B1
             panel_refresher: None,              // default: frozen panel (pre-refresh behaviour)
             merger_model: None,                 // default: MERGER_MODEL_V2 (daemon byte-identical)
+            checkpoint_store: None,             // default: no checkpointing (pre-B2 byte-identical)
+            resume: ResumeState::default(),     // default: fresh run, no stage skipped
         }
     }
 
@@ -197,10 +248,38 @@ impl EngineConfig {
         self
     }
 
+    /// Inject a stage-level checkpoint store (harden/checkpoint-resume B2).
+    /// Each stage artifact is saved as it completes (see `save_checkpoint`
+    /// for the per-stage payload formats). Saves are best-effort: a failed
+    /// save logs a warning and never kills the run.
+    pub fn with_checkpoint_store(mut self, store: Arc<dyn search::CheckpointStore>) -> Self {
+        self.checkpoint_store = Some(store);
+        self
+    }
+
+    /// Provide restored stage artifacts to resume from (B2). Populated
+    /// stages are skipped — see [`ResumeState`] for the exact skip
+    /// semantics per stage.
+    pub fn with_resume(mut self, resume: ResumeState) -> Self {
+        self.resume = resume;
+        self
+    }
+
     /// Set the TTD run identifier (weave_id or session_id). The live dispatch
     /// path calls this so the bibliography dedup is scoped per run (CR-01).
     pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
         self.run_id = run_id.into();
+        self
+    }
+
+    /// Inject a shared degradation sink (C3). Optional, like the other seams:
+    /// `EngineConfig::new` already carries a fresh private sink (via
+    /// `TtdConfig::default`), and `run_engine_with_bib` drains it into
+    /// `EngineResult.degradations`. Inject your own handle only to observe
+    /// degradations mid-run, or after a hard engine failure (when no
+    /// `EngineResult` materialises and the sink keeps its contents).
+    pub fn with_degradation_sink(mut self, sink: crate::ttd::config::DegradationSink) -> Self {
+        self.ttd_config.degradation_sink = sink;
         self
     }
 
@@ -299,6 +378,12 @@ pub struct EngineResult {
     pub yaml: String,
     /// The governance record from the artifact emit step.
     pub emit_record: TtdEmitRecord,
+    /// Engine-internal degradations that did not kill the run (C3): bibliography
+    /// write failures and resource-guard truncations, drained from the shared
+    /// [`DegradationSink`] on `ttd_config`. Empty on a clean run. Non-empty
+    /// means the output is usable but partial — callers must surface it
+    /// (espigue folds it into `ReviewResult.degraded`/`notice`, which exits 2).
+    pub degradations: Vec<String>,
 }
 
 /// Run the full three-stage TTD engine.
@@ -335,98 +420,118 @@ pub async fn run_engine_with_bib(
     let engine_start = std::time::Instant::now();
 
     // ── Stage 1: Graph extraction ─────────────────────────────────────────────
-    // Run TtdMachine<ArgumentationGraph> to produce the argumentation graph.
-    // Input: expert_responses (the full panel).
-    // A3: stage 1 uses config.retriever (Live) — full three-lane fusion.
-    // F13: compute stage-1 panel ids for the graph traceability veto allowlist.
-    let stage1_panel_ids: std::collections::HashSet<String> =
-        panel.iter().map(|r| r.expert_id.as_str().to_string()).collect();
-    let stage1_machine = build_graph_machine(
-        agent_id, model, &config.ttd_config, executor.clone(), Arc::clone(&bib_store),
-        &config.run_id, Arc::clone(&config.retriever), // DISP-02 / A3 Live
-        RetrievalPolicy::Live,
-        config.profile,
-        stage1_panel_ids, // F13: stage-1 panel ids for traceability_veto_graph
-    )?;
-    let mut graph = stage1_machine.run(panel).await?;
-    // Stamp config identity onto the parsed graph: the XML parse constructs
-    // it with empty study/round/question ids (probe 10 emitted '' for all
-    // three). Identity comes from the dispatch boundary, not model output.
-    // Also stamp schema_version from the profile (d94fb3d pattern).
-    graph.study_id = config.study_id.clone();
-    graph.round_id = config.round_id.clone();
-    graph.question_id = config.question_id.clone();
-    graph.schema_version = config.profile.schema_version().to_string();
-    graph.prompt_version = config.profile.graph_prompt_version().to_string();
-    tracing::info!(
-        target: "ttd_perf",
-        run_id = %config.run_id,
-        duration_ms = engine_start.elapsed().as_millis() as u64,
-        "ttd_perf: stage 1 (graph) complete"
-    );
+    // B2 resume seam: a restored graph checkpoint skips BOTH the graph machine
+    // and the DB re-verify pass — the checkpoint was saved AFTER re-verify ran,
+    // so the restored statuses are already final.
+    let graph = if let Some(g) = config.resume.graph.clone() {
+        tracing::info!(
+            run_id = %config.run_id,
+            "checkpoint resume: stage 1 (graph) restored from checkpoint — skipping graph machine and DB re-verify"
+        );
+        g
+    } else {
+        // Run TtdMachine<ArgumentationGraph> to produce the argumentation graph.
+        // Input: expert_responses (the full panel).
+        // A3: stage 1 uses config.retriever (Live) — full three-lane fusion.
+        // F13: compute stage-1 panel ids for the graph traceability veto allowlist.
+        let stage1_panel_ids: std::collections::HashSet<String> =
+            panel.iter().map(|r| r.expert_id.as_str().to_string()).collect();
+        let stage1_machine = build_graph_machine(
+            agent_id, model, &config.ttd_config, executor.clone(), Arc::clone(&bib_store),
+            &config.run_id, Arc::clone(&config.retriever), // DISP-02 / A3 Live
+            RetrievalPolicy::Live,
+            config.profile,
+            stage1_panel_ids, // F13: stage-1 panel ids for traceability_veto_graph
+        )?;
+        let mut graph = stage1_machine.run(panel).await?;
+        // Stamp config identity onto the parsed graph: the XML parse constructs
+        // it with empty study/round/question ids (probe 10 emitted '' for all
+        // three). Identity comes from the dispatch boundary, not model output.
+        // Also stamp schema_version from the profile (d94fb3d pattern).
+        graph.study_id = config.study_id.clone();
+        graph.round_id = config.round_id.clone();
+        graph.question_id = config.question_id.clone();
+        graph.schema_version = config.profile.schema_version().to_string();
+        graph.prompt_version = config.profile.graph_prompt_version().to_string();
+        tracing::info!(
+            target: "ttd_perf",
+            run_id = %config.run_id,
+            duration_ms = engine_start.elapsed().as_millis() as u64,
+            "ttd_perf: stage 1 (graph) complete"
+        );
 
-    // ── DB-backed graph quote re-verification (worklist item 4) ──────────────
-    // The in-machine verify pass only sees the initial panel; nodes added by
-    // gap-resolve cite retrieval-context papers it cannot check. Re-verify
-    // every quoted node against its cited source's STORED text so the
-    // stage-2 graph markdown carries real statuses for all sources.
-    if let Some(ref refresher) = config.panel_refresher {
-        let quoted_ids: Vec<String> = {
-            let mut seen = std::collections::HashSet::new();
-            graph
-                .nodes
-                .iter()
-                .filter(|n| n.quote.as_deref().map_or(false, |q| !q.trim().is_empty()))
-                .filter(|n| seen.insert(n.expert_id.clone()))
-                .map(|n| n.expert_id.clone())
-                .collect()
-        };
-        if !quoted_ids.is_empty() {
-            match refresher.refresh(&quoted_ids).await {
-                Ok(resolved) => {
-                    let texts: std::collections::HashMap<String, String> = resolved
-                        .into_iter()
-                        .map(|e| (e.expert_id.as_str().to_string(), e.prose))
-                        .collect();
-                    let (mut n_verified, mut n_other) = (0usize, 0usize);
-                    for node in &mut graph.nodes {
-                        if let Some(q) = node.quote.as_deref().filter(|q| !q.trim().is_empty()) {
-                            let status = match texts.get(&node.expert_id) {
-                                Some(t) => {
-                                    crate::ttd::stages::graph::verify_quote_status(q, t)
-                                }
-                                None => "absent".to_string(),
-                            };
-                            if status == "verified" { n_verified += 1 } else { n_other += 1 }
-                            node.verification_status = Some(status);
+        // ── DB-backed graph quote re-verification (worklist item 4) ──────────
+        // The in-machine verify pass only sees the initial panel; nodes added by
+        // gap-resolve cite retrieval-context papers it cannot check. Re-verify
+        // every quoted node against its cited source's STORED text so the
+        // stage-2 graph markdown carries real statuses for all sources.
+        if let Some(ref refresher) = config.panel_refresher {
+            let quoted_ids: Vec<String> = {
+                let mut seen = std::collections::HashSet::new();
+                graph
+                    .nodes
+                    .iter()
+                    .filter(|n| n.quote.as_deref().map_or(false, |q| !q.trim().is_empty()))
+                    .filter(|n| seen.insert(n.expert_id.clone()))
+                    .map(|n| n.expert_id.clone())
+                    .collect()
+            };
+            if !quoted_ids.is_empty() {
+                match refresher.refresh(&quoted_ids).await {
+                    Ok(resolved) => {
+                        let texts: std::collections::HashMap<String, String> = resolved
+                            .into_iter()
+                            .map(|e| (e.expert_id.as_str().to_string(), e.prose))
+                            .collect();
+                        let (mut n_verified, mut n_other) = (0usize, 0usize);
+                        for node in &mut graph.nodes {
+                            if let Some(q) = node.quote.as_deref().filter(|q| !q.trim().is_empty()) {
+                                let status = match texts.get(&node.expert_id) {
+                                    Some(t) => {
+                                        crate::ttd::stages::graph::verify_quote_status(q, t)
+                                    }
+                                    None => "absent".to_string(),
+                                };
+                                if status == "verified" { n_verified += 1 } else { n_other += 1 }
+                                node.verification_status = Some(status);
+                            }
                         }
+                        tracing::info!(
+                            target: "ttd_perf",
+                            run_id = %config.run_id,
+                            n_verified,
+                            n_other,
+                            "ttd_perf: graph quote re-verification (DB-backed)"
+                        );
                     }
-                    tracing::info!(
-                        target: "ttd_perf",
-                        run_id = %config.run_id,
-                        n_verified,
-                        n_other,
-                        "ttd_perf: graph quote re-verification (DB-backed)"
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        run_id = %config.run_id,
-                        error = %e,
-                        "graph quote re-verification: resolver failed — statuses unchanged"
-                    );
+                    Err(e) => {
+                        tracing::warn!(
+                            run_id = %config.run_id,
+                            error = %e,
+                            "graph quote re-verification: resolver failed — statuses unchanged"
+                        );
+                    }
                 }
             }
         }
-    }
+
+        // B2 checkpoint seam: save AFTER the re-verify block so a resumed run
+        // never re-runs the refresher pass.
+        save_checkpoint(config, "graph", &graph).await;
+        graph
+    };
 
     // ── Stage-2 panel refresh (coverage seam) ────────────────────────────────
     // Union of initial panel ids + graph source ids, first-seen order. The
     // gap-fill papers stage 1 discovered are fully indexed locally by now;
     // refreshing hands stage 2 `<paper_text>` for essentially every graph
     // source. Failure or empty result degrades to the original panel, loudly.
+    // B2 resume: a restored synthesis makes the refresh dead work — its only
+    // consumer (Stage 2 + post-process) is skipped below.
     let refreshed_panel: Option<Vec<ExpertResponse>> =
-        if let Some(ref refresher) = config.panel_refresher {
+        if config.resume.synthesis.is_some() {
+            None
+        } else if let Some(ref refresher) = config.panel_refresher {
             let mut ids: Vec<String> =
                 panel.iter().map(|e| e.expert_id.as_str().to_string()).collect();
             let mut seen: std::collections::HashSet<String> = ids.iter().cloned().collect();
@@ -478,72 +583,89 @@ pub async fn run_engine_with_bib(
     let stage2_panel: &[ExpertResponse] = refreshed_panel.as_deref().unwrap_or(panel);
 
     // ── Stage 2: Synthesis generation ────────────────────────────────────────
-    // Run TtdMachine<SynthesisArtifact> seeded from the Stage-1 graph.
-    // Input: expert_responses (refreshed panel when available) + graph (threaded in).
-    // A3: stage 2 uses config.retriever_local (LocalOnly) — internal lane only.
-    // F13: compute stage-2 panel ids from the refreshed-or-original panel.
-    // Use stage2_panel (resolved at line above), NOT the initial panel — stage-2
-    // refresh papers are legitimate panel members and the VETO must accept them.
-    let stage2_panel_ids: std::collections::HashSet<String> =
-        stage2_panel.iter().map(|r| r.expert_id.as_str().to_string()).collect();
-    let stage2_machine = build_synthesis_machine(
-        agent_id, model, &config.ttd_config, executor.clone(), Some(graph.clone()),
-        Arc::clone(&bib_store), &config.run_id, Arc::clone(&config.retriever_local), // A3 LocalOnly
-        RetrievalPolicy::LocalOnly,
-        config.profile,
-        stage2_panel_ids, // F13: stage-2 panel ids for traceability_veto_synthesis
-        stage2_panel,     // depth-probe B: prose for section-widened merger evidence
-        config.merger_model.as_deref(), // standalone OpenRouter merger slug override
-    )?;
-    let stage2_start = std::time::Instant::now();
-    let merged_synthesis = stage2_machine.run(stage2_panel).await?;
-    tracing::info!(
-        target: "ttd_perf",
-        run_id = %config.run_id,
-        duration_ms = stage2_start.elapsed().as_millis() as u64,
-        "ttd_perf: stage 2 (synthesis) complete"
-    );
-    // F14 (probe-24 follow-up): measure node attribution on the MERGER output,
-    // BEFORE post-process/revision can alter it. Isolates merger quality from the
-    // revision stage — if these are non-zero but the final artifact is not, the
-    // loss is in revision/post-process, not the merger.
-    {
-        let claims_with_refs = merged_synthesis
-            .claims
-            .iter()
-            .filter(|c| !c.node_refs.is_empty())
-            .count();
-        let quotes_with_node = merged_synthesis
-            .claims
-            .iter()
-            .flat_map(|c| c.quotes.iter())
-            .filter(|q| q.node_id.is_some())
-            .count();
-        let total_quotes: usize =
-            merged_synthesis.claims.iter().map(|c| c.quotes.len()).sum();
+    // B2 resume seam: a restored synthesis checkpoint skips Stage 2, the F14
+    // logging block, and post-process — the checkpoint was saved AFTER
+    // post-process, so the restored artifact is already fully processed.
+    // (The stage-2 panel refresh above is skipped by the same condition.)
+    let mut synthesis = if let Some(s) = config.resume.synthesis.clone() {
+        tracing::info!(
+            run_id = %config.run_id,
+            "checkpoint resume: stage 2 (synthesis) restored from checkpoint — skipping panel refresh, synthesis machine, and post-process"
+        );
+        s
+    } else {
+        // Run TtdMachine<SynthesisArtifact> seeded from the Stage-1 graph.
+        // Input: expert_responses (refreshed panel when available) + graph (threaded in).
+        // A3: stage 2 uses config.retriever_local (LocalOnly) — internal lane only.
+        // F13: compute stage-2 panel ids from the refreshed-or-original panel.
+        // Use stage2_panel (resolved at line above), NOT the initial panel — stage-2
+        // refresh papers are legitimate panel members and the VETO must accept them.
+        let stage2_panel_ids: std::collections::HashSet<String> =
+            stage2_panel.iter().map(|r| r.expert_id.as_str().to_string()).collect();
+        let stage2_machine = build_synthesis_machine(
+            agent_id, model, &config.ttd_config, executor.clone(), Some(graph.clone()),
+            Arc::clone(&bib_store), &config.run_id, Arc::clone(&config.retriever_local), // A3 LocalOnly
+            RetrievalPolicy::LocalOnly,
+            config.profile,
+            stage2_panel_ids, // F13: stage-2 panel ids for traceability_veto_synthesis
+            stage2_panel,     // depth-probe B: prose for section-widened merger evidence
+            config.merger_model.as_deref(), // standalone OpenRouter merger slug override
+        )?;
+        let stage2_start = std::time::Instant::now();
+        let merged_synthesis = stage2_machine.run(stage2_panel).await?;
         tracing::info!(
             target: "ttd_perf",
             run_id = %config.run_id,
-            merged_claims = merged_synthesis.claims.len(),
-            claims_with_node_refs = claims_with_refs,
-            total_quotes,
-            quotes_with_node_id = quotes_with_node,
-            "ttd_perf: F14 merger output node attribution (pre-post-process)"
+            duration_ms = stage2_start.elapsed().as_millis() as u64,
+            "ttd_perf: stage 2 (synthesis) complete"
         );
-    }
+        // F14 (probe-24 follow-up): measure node attribution on the MERGER output,
+        // BEFORE post-process/revision can alter it. Isolates merger quality from the
+        // revision stage — if these are non-zero but the final artifact is not, the
+        // loss is in revision/post-process, not the merger.
+        {
+            let claims_with_refs = merged_synthesis
+                .claims
+                .iter()
+                .filter(|c| !c.node_refs.is_empty())
+                .count();
+            let quotes_with_node = merged_synthesis
+                .claims
+                .iter()
+                .flat_map(|c| c.quotes.iter())
+                .filter(|q| q.node_id.is_some())
+                .count();
+            let total_quotes: usize =
+                merged_synthesis.claims.iter().map(|c| c.quotes.len()).sum();
+            tracing::info!(
+                target: "ttd_perf",
+                run_id = %config.run_id,
+                merged_claims = merged_synthesis.claims.len(),
+                claims_with_node_refs = claims_with_refs,
+                total_quotes,
+                quotes_with_node_id = quotes_with_node,
+                "ttd_perf: F14 merger output node attribution (pre-post-process)"
+            );
+        }
 
-    // Post-process synthesis (7-step chain — Pitfall 5 guard).
-    let post_process_start = std::time::Instant::now();
-    // Quote verification runs against the same panel stage 2 drew from.
-    // Fix C (probe-17 cause 2): pass the graph so DB-verified node quotes can
-    // be inherited onto synthesis claims. Graph was re-verified at lines 300-353.
-    let mut synthesis = post_process_synthesis_with_graph(merged_synthesis, stage2_panel, &executor, config.profile, config.panel_refresher.as_ref(), Some(&graph)).await?;
-    tracing::info!(
-        target: "ttd_perf",
-        run_id = %config.run_id,
-        duration_ms = post_process_start.elapsed().as_millis() as u64,
-        "ttd_perf: post-process synthesis complete"
-    );
+        // Post-process synthesis (7-step chain — Pitfall 5 guard).
+        let post_process_start = std::time::Instant::now();
+        // Quote verification runs against the same panel stage 2 drew from.
+        // Fix C (probe-17 cause 2): pass the graph so DB-verified node quotes can
+        // be inherited onto synthesis claims. Graph was re-verified at lines 300-353.
+        let synthesis = post_process_synthesis_with_graph(merged_synthesis, stage2_panel, &executor, config.profile, config.panel_refresher.as_ref(), Some(&graph)).await?;
+        tracing::info!(
+            target: "ttd_perf",
+            run_id = %config.run_id,
+            duration_ms = post_process_start.elapsed().as_millis() as u64,
+            "ttd_perf: post-process synthesis complete"
+        );
+
+        // B2 checkpoint seam: save AFTER post_process returns — the checkpoint
+        // holds the fully post-processed artifact.
+        save_checkpoint(config, "synthesis", &synthesis).await;
+        synthesis
+    };
 
     // ── Plan tournament (rubric-encoding Phase 1, W-e714abb4) ────────────────
     // Runs between Stage 2 and Stage 3 when opted in via `plan_mode`. The five
@@ -551,7 +673,10 @@ pub async fn run_engine_with_bib(
     // v2/v3 profiles only — v1 prompts never consume a plan. Graceful
     // degradation: a failed tournament logs and Stage 3 proceeds plan-free —
     // it NEVER kills the run.
-    let plan: Option<Arc<crate::ttd::plan::ReviewPlan>> = if config.ttd_config.plan_mode
+    // B2 resume: the plan only feeds Stage 3, so a restored narrative makes
+    // the tournament dead work — skip it.
+    let plan: Option<Arc<crate::ttd::plan::ReviewPlan>> = if config.resume.narrative.is_none()
+        && config.ttd_config.plan_mode
         != crate::ttd::plan::PlanMode::Disabled
         && matches!(
             config.profile,
@@ -600,23 +725,38 @@ pub async fn run_engine_with_bib(
     };
 
     // ── Stage 3: Narrative generation ────────────────────────────────────────
-    // Run TtdMachine<String> from the Stage-2 synthesis.
-    // Input: [synthesis] — Stage 3 ignores the `inputs` slice; the synthesis
-    // is injected into NarrativeDraftGen at construction time.
-    // NoopRetriever: Stage 3 has no retrieval (RESEARCH Pattern 5).
-    let stage3_machine = build_narrative_machine(
-        agent_id, model, &config.ttd_config, executor.clone(), synthesis.clone(),
-        Arc::clone(&bib_store), &config.run_id, config.profile,
-        plan, // rubric-encoding Phase 1: None ⇒ byte-identical pre-plan behaviour
-    )?;
-    let stage3_start = std::time::Instant::now();
-    let narrative = stage3_machine.run(panel).await?;
-    tracing::info!(
-        target: "ttd_perf",
-        run_id = %config.run_id,
-        duration_ms = stage3_start.elapsed().as_millis() as u64,
-        "ttd_perf: stage 3 (narrative) complete"
-    );
+    // B2 resume seam: a restored narrative checkpoint skips Stage 3 (and the
+    // plan tournament above — the plan only feeds Stage 3). Everything after
+    // (narrative wiring, identity stamps, emit) runs unchanged in all cases.
+    let narrative = if let Some(n) = config.resume.narrative.clone() {
+        tracing::info!(
+            run_id = %config.run_id,
+            "checkpoint resume: stage 3 (narrative) restored from checkpoint — skipping plan tournament and narrative machine"
+        );
+        n
+    } else {
+        // Run TtdMachine<String> from the Stage-2 synthesis.
+        // Input: [synthesis] — Stage 3 ignores the `inputs` slice; the synthesis
+        // is injected into NarrativeDraftGen at construction time.
+        // NoopRetriever: Stage 3 has no retrieval (RESEARCH Pattern 5).
+        let stage3_machine = build_narrative_machine(
+            agent_id, model, &config.ttd_config, executor.clone(), synthesis.clone(),
+            Arc::clone(&bib_store), &config.run_id, config.profile,
+            plan, // rubric-encoding Phase 1: None ⇒ byte-identical pre-plan behaviour
+        )?;
+        let stage3_start = std::time::Instant::now();
+        let narrative = stage3_machine.run(panel).await?;
+        tracing::info!(
+            target: "ttd_perf",
+            run_id = %config.run_id,
+            duration_ms = stage3_start.elapsed().as_millis() as u64,
+            "ttd_perf: stage 3 (narrative) complete"
+        );
+
+        // B2 checkpoint seam: save AFTER the stage-3 machine returns.
+        save_checkpoint(config, "narrative", &narrative).await;
+        narrative
+    };
 
     // ── Wire narrative into synthesis ────────────────────────────────────────
     synthesis.narrative = narrative.clone();
@@ -647,12 +787,77 @@ pub async fn run_engine_with_bib(
         "ttd_perf: engine run complete (all three stages)"
     );
 
+    // C3: drain the shared degradation sink into the result envelope. The
+    // stage machines pushed a reason for every bibliography write failure and
+    // every guard truncation (break-and-keep-best); a successful return with
+    // a non-empty list is a degraded-but-usable run, not a clean one.
+    // Draining (not snapshotting) keeps a reused config from double-reporting.
+    let degradations = config.ttd_config.degradation_sink.drain();
+    if !degradations.is_empty() {
+        tracing::warn!(
+            run_id = %config.run_id,
+            n_degradations = degradations.len(),
+            "engine completed WITH internal degradations — output is best-so-far, not full-fidelity"
+        );
+    }
+
     Ok(EngineResult {
         synthesis: final_synthesis,
         graph,
         yaml,
         emit_record,
+        degradations,
     })
+}
+
+// ── Checkpoint save helper (harden/checkpoint-resume B2) ──────────────────────
+
+/// Persist one stage artifact to the configured checkpoint store.
+///
+/// No-op when `config.checkpoint_store` is `None`.
+///
+/// ## Payload format per stage (item B4 loads these — keep in sync)
+///
+/// All payloads are `serde_json::to_string` of the stage's artifact type:
+/// - `"graph"`: JSON object (`ArgumentationGraph`)
+/// - `"synthesis"`: JSON object (`SynthesisArtifact`)
+/// - `"narrative"`: JSON string (`String` — serde_json serialises it as a
+///   quoted JSON string, e.g. `"the narrative text"`; load it with
+///   `serde_json::from_str::<String>`, not as raw text)
+///
+/// ## Never-kill-the-run contract
+///
+/// Checkpointing is best-effort. ANY failure — serialisation or store write —
+/// logs a `tracing::warn!` with run_id/stage/error and returns. It never
+/// propagates an error and never flips the degraded flag: losing a checkpoint
+/// only costs a future resume, never the current run.
+async fn save_checkpoint<T: serde::Serialize>(config: &EngineConfig, stage: &str, artifact: &T) {
+    let Some(store) = config.checkpoint_store.as_ref() else {
+        return;
+    };
+    let payload = match serde_json::to_string(artifact) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(
+                run_id = %config.run_id,
+                stage,
+                error = %e,
+                "checkpoint save: serialisation failed — run continues without this checkpoint"
+            );
+            return;
+        }
+    };
+    if let Err(e) = store
+        .save_stage(&config.run_id, stage, &payload, &crate::ttd::artifact::code_version())
+        .await
+    {
+        tracing::warn!(
+            run_id = %config.run_id,
+            stage,
+            error = %e,
+            "checkpoint save: store write failed — run continues without this checkpoint"
+        );
+    }
 }
 
 // ── Stage machine builders ────────────────────────────────────────────────────
@@ -1767,6 +1972,385 @@ mod tests {
              when engine runs under V2LitReview profile. The engine stamp block \
              must set graph.prompt_version = config.profile.graph_prompt_version(), \
              overriding the 'v1/graph' returned by gap_resolve full-regen."
+        );
+    }
+
+    // ── Checkpoint tests (harden/checkpoint-resume B2) ────────────────────────
+
+    use search::checkpoint_store::{CheckpointStore, RunRecord, StageCheckpoint};
+
+    /// Build a stub AlzinaError for executor/store failure injection.
+    fn stub_err(msg: &str) -> base::error::AlzinaError {
+        base::error::AlzinaError::Search(base::error::SearchDetail {
+            message: msg.into(),
+            degraded: true,
+            degradation_reason: None,
+        })
+    }
+
+    /// Records every save_stage call as a (stage, payload) pair
+    /// (mirrors the RecordingBibStore mock pattern).
+    struct RecordingCheckpointStore {
+        saves: Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    }
+
+    impl RecordingCheckpointStore {
+        fn new() -> Self {
+            Self { saves: Arc::new(std::sync::Mutex::new(Vec::new())) }
+        }
+    }
+
+    #[async_trait]
+    impl CheckpointStore for RecordingCheckpointStore {
+        async fn save_stage(
+            &self,
+            _run_id: &str,
+            stage: &str,
+            payload: &str,
+            _code_version: &str,
+        ) -> base::AlzinaResult<()> {
+            self.saves.lock().unwrap().push((stage.to_string(), payload.to_string()));
+            Ok(())
+        }
+
+        async fn record_run_start(&self, _run: &RunRecord) -> base::AlzinaResult<()> {
+            Ok(())
+        }
+
+        async fn load_run(&self, _run_id: &str) -> base::AlzinaResult<Option<RunRecord>> {
+            Ok(None)
+        }
+
+        async fn load_stage(
+            &self,
+            _run_id: &str,
+            _stage: &str,
+        ) -> base::AlzinaResult<Option<StageCheckpoint>> {
+            Ok(None)
+        }
+
+        async fn mark_run_status(&self, _run_id: &str, _status: &str) -> base::AlzinaResult<()> {
+            Ok(())
+        }
+
+        async fn delete_checkpoints(&self, _run_id: &str) -> base::AlzinaResult<()> {
+            Ok(())
+        }
+
+        async fn list_resumable_runs(&self) -> base::AlzinaResult<Vec<RunRecord>> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// N=1, S=1 config with a run_id — shared base for the checkpoint tests.
+    fn checkpoint_test_config(run_id: &str) -> EngineConfig {
+        let mut config = EngineConfig::new(
+            "test-agent",
+            "google/gemini-2.5-flash",
+            "study-cp",
+            "round-1",
+            "q-cp",
+        )
+        .with_run_id(run_id);
+        config.ttd_config.n_initial_drafts = 1;
+        config.ttd_config.n_denoise_steps = 1;
+        config
+    }
+
+    /// B2: a full run saves one checkpoint per stage, in stage order, and
+    /// each payload deserialises back into its artifact type (the format
+    /// contract item B4 loads against).
+    #[tokio::test]
+    async fn checkpoints_saved_at_each_seam() {
+        let store = Arc::new(RecordingCheckpointStore::new());
+        let saves = store.saves.clone();
+
+        let config = checkpoint_test_config("weave-cp-seams")
+            .with_checkpoint_store(store as Arc<dyn CheckpointStore>);
+
+        run_engine(&stub_panel(), &config, Arc::new(ThreeStageStubExecutor))
+            .await
+            .expect("run_engine must succeed");
+
+        let recorded = saves.lock().unwrap().clone();
+        let stages: Vec<&str> = recorded.iter().map(|(s, _)| s.as_str()).collect();
+        assert_eq!(
+            stages,
+            vec!["graph", "synthesis", "narrative"],
+            "one checkpoint per stage, saved in stage order"
+        );
+
+        // Each payload must deserialise into its stage's artifact type.
+        serde_json::from_str::<ArgumentationGraph>(&recorded[0].1)
+            .expect("graph payload must deserialise into ArgumentationGraph");
+        serde_json::from_str::<SynthesisArtifact>(&recorded[1].1)
+            .expect("synthesis payload must deserialise into SynthesisArtifact");
+        let narrative: String = serde_json::from_str(&recorded[2].1)
+            .expect("narrative payload must deserialise as a JSON string");
+        assert!(!narrative.is_empty(), "narrative checkpoint must carry the text");
+    }
+
+    /// B2 load-bearing resume proof: a run that dies at Stage 3 leaves
+    /// graph + synthesis checkpoints; a second run resuming from those
+    /// payloads succeeds even though its executor ERRORS on every graph and
+    /// synthesis task — stages 1-2 are genuinely skipped.
+    #[tokio::test]
+    async fn fail_at_stage3_then_resume() {
+        /// Errors on every narrative-stage task; delegates the rest to the stub.
+        struct FailNarrativeExecutor;
+
+        #[async_trait]
+        impl AgentExecutor for FailNarrativeExecutor {
+            async fn execute(
+                &self,
+                agent_id: &base::identity::AgentId,
+                instruction: &str,
+                model: &str,
+                task: &str,
+            ) -> base::AlzinaResult<String> {
+                if task.starts_with("narrative") {
+                    return Err(stub_err("stub: narrative stage down"));
+                }
+                ThreeStageStubExecutor.execute(agent_id, instruction, model, task).await
+            }
+        }
+
+        /// Errors on every graph/synthesis-stage task; answers narrative ones.
+        struct FailGraphSynthesisExecutor;
+
+        #[async_trait]
+        impl AgentExecutor for FailGraphSynthesisExecutor {
+            async fn execute(
+                &self,
+                agent_id: &base::identity::AgentId,
+                instruction: &str,
+                model: &str,
+                task: &str,
+            ) -> base::AlzinaResult<String> {
+                if task.starts_with("graph") || task.starts_with("synthesis") {
+                    return Err(stub_err("stub: stage 1/2 must not run on resume"));
+                }
+                ThreeStageStubExecutor.execute(agent_id, instruction, model, task).await
+            }
+        }
+
+        // Run 1: dies at Stage 3 → graph + synthesis checkpoints only.
+        let store = Arc::new(RecordingCheckpointStore::new());
+        let saves = store.saves.clone();
+        let config = checkpoint_test_config("weave-cp-resume")
+            .with_checkpoint_store(store as Arc<dyn CheckpointStore>);
+
+        let first = run_engine(&stub_panel(), &config, Arc::new(FailNarrativeExecutor)).await;
+        assert!(first.is_err(), "run must fail when stage 3 errors");
+
+        let recorded = saves.lock().unwrap().clone();
+        let stages: Vec<&str> = recorded.iter().map(|(s, _)| s.as_str()).collect();
+        assert_eq!(
+            stages,
+            vec!["graph", "synthesis"],
+            "only graph + synthesis checkpoints exist after a stage-3 death"
+        );
+
+        // Run 2: resume from the recorded payloads. The executor errors on
+        // ALL graph/synthesis tasks — success proves stages 1-2 are skipped.
+        let resume = ResumeState {
+            graph: Some(
+                serde_json::from_str(&recorded[0].1).expect("graph payload must deserialise"),
+            ),
+            synthesis: Some(
+                serde_json::from_str(&recorded[1].1)
+                    .expect("synthesis payload must deserialise"),
+            ),
+            narrative: None,
+        };
+        let config2 = checkpoint_test_config("weave-cp-resume").with_resume(resume);
+
+        let result = run_engine(&stub_panel(), &config2, Arc::new(FailGraphSynthesisExecutor))
+            .await
+            .expect("resumed run must succeed without any stage 1/2 work");
+        assert!(
+            !result.synthesis.narrative.is_empty(),
+            "resumed run must still produce the stage-3 narrative"
+        );
+    }
+
+    /// B2: with all three stages restored, the engine makes ZERO LLM calls —
+    /// an always-erroring executor cannot fail the run. Plan mode stays at
+    /// the Disabled default, so the tournament never fires either.
+    #[tokio::test]
+    async fn resume_with_all_checkpoints_makes_zero_llm_calls() {
+        struct AlwaysErrExecutor;
+
+        #[async_trait]
+        impl AgentExecutor for AlwaysErrExecutor {
+            async fn execute(
+                &self,
+                _agent_id: &base::identity::AgentId,
+                _instruction: &str,
+                _model: &str,
+                task: &str,
+            ) -> base::AlzinaResult<String> {
+                Err(stub_err(&format!("no LLM calls allowed on full resume (task={task})")))
+            }
+        }
+
+        let resume = ResumeState {
+            graph: Some(ArgumentationGraph::new(
+                "s", "r", "q", "google/gemini-2.5-flash", "v1/graph",
+            )),
+            synthesis: Some(SynthesisArtifact::new(
+                "s", "r", "q", "google/gemini-2.5-flash", "v1/synthesis",
+            )),
+            narrative: Some("Restored narrative.".to_string()),
+        };
+        let config = checkpoint_test_config("weave-cp-full").with_resume(resume);
+
+        let result = run_engine(&stub_panel(), &config, Arc::new(AlwaysErrExecutor))
+            .await
+            .expect("fully-resumed run must complete with zero LLM calls");
+        assert_eq!(result.synthesis.narrative, "Restored narrative.");
+    }
+
+    /// B2 never-kill-the-run contract: a store whose save_stage always errors
+    /// must not fail the run — checkpointing is best-effort.
+    #[tokio::test]
+    async fn checkpoint_write_failure_does_not_kill_run() {
+        struct FailingCheckpointStore;
+
+        #[async_trait]
+        impl CheckpointStore for FailingCheckpointStore {
+            async fn save_stage(
+                &self,
+                _run_id: &str,
+                _stage: &str,
+                _payload: &str,
+                _code_version: &str,
+            ) -> base::AlzinaResult<()> {
+                Err(stub_err("stub: checkpoint disk full"))
+            }
+
+            async fn record_run_start(&self, _run: &RunRecord) -> base::AlzinaResult<()> {
+                Ok(())
+            }
+
+            async fn load_run(&self, _run_id: &str) -> base::AlzinaResult<Option<RunRecord>> {
+                Ok(None)
+            }
+
+            async fn load_stage(
+                &self,
+                _run_id: &str,
+                _stage: &str,
+            ) -> base::AlzinaResult<Option<StageCheckpoint>> {
+                Ok(None)
+            }
+
+            async fn mark_run_status(
+                &self,
+                _run_id: &str,
+                _status: &str,
+            ) -> base::AlzinaResult<()> {
+                Ok(())
+            }
+
+            async fn delete_checkpoints(&self, _run_id: &str) -> base::AlzinaResult<()> {
+                Ok(())
+            }
+
+            async fn list_resumable_runs(&self) -> base::AlzinaResult<Vec<RunRecord>> {
+                Ok(Vec::new())
+            }
+        }
+
+        let config = checkpoint_test_config("weave-cp-fail")
+            .with_checkpoint_store(Arc::new(FailingCheckpointStore));
+
+        run_engine(&stub_panel(), &config, Arc::new(ThreeStageStubExecutor))
+            .await
+            .expect("a failing checkpoint store must never kill the run");
+    }
+
+    // ── C3: silent engine degradation reaches EngineResult.degradations ──────
+
+    /// BibliographyStore whose record_sources always fails — the locked/full/
+    /// drifted-DB scenario that previously degraded the bibliography silently.
+    struct FailingBibStore;
+
+    #[async_trait]
+    impl BibliographyStore for FailingBibStore {
+        async fn record_sources(
+            &self,
+            _run_id: &str,
+            _stage: &str,
+            _step: usize,
+            _sources: &[BibEntry],
+        ) -> base::AlzinaResult<()> {
+            Err(stub_err("stub: bibliography DB locked"))
+        }
+    }
+
+    /// C3: a bib store that fails every write must NOT kill the run, but the
+    /// loss must surface in `EngineResult.degradations` (envelope propagation
+    /// of the run.rs warn-and-continue path).
+    #[tokio::test]
+    async fn failing_bib_store_reports_degradation_in_result() {
+        // GapReturningStubExecutor guarantees a gap; OneSourceRetriever makes
+        // retrieval non-empty, so the bib write (and its failure) fires.
+        let config = EngineConfig::new(
+            "test-agent",
+            "google/gemini-2.5-flash",
+            "study-c3",
+            "round-1",
+            "q-c3",
+        )
+        .with_run_id("weave-c3-bib")
+        .with_retriever(Arc::new(OneSourceRetriever));
+
+        let mut ttd_config = config.ttd_config.clone();
+        ttd_config.n_initial_drafts = 1;
+        ttd_config.n_denoise_steps = 1;
+        let config = EngineConfig { ttd_config, ..config };
+
+        let result = run_engine_with_bib(
+            &stub_panel(),
+            &config,
+            Arc::new(GapReturningStubExecutor),
+            Arc::new(FailingBibStore),
+        )
+        .await
+        .expect("a failing bib store must never kill the run (warn-and-continue)");
+
+        assert!(
+            !result.degradations.is_empty(),
+            "C3: failed bibliography writes must surface in EngineResult.degradations"
+        );
+        assert!(
+            result
+                .degradations
+                .iter()
+                .any(|d| d.contains("bibliography write failed")),
+            "C3: degradation reason must name the bibliography write, got {:?}",
+            result.degradations
+        );
+    }
+
+    /// C3: a clean engine run reports zero degradations — no false positives.
+    #[tokio::test]
+    async fn clean_engine_run_has_empty_degradations() {
+        let mut config = EngineConfig::new(
+            "test-agent", "google/gemini-2.5-flash", "study-c3", "round-1", "q-c3",
+        );
+        config.ttd_config.n_initial_drafts = 1;
+        config.ttd_config.n_denoise_steps = 1;
+
+        let result = run_engine(&stub_panel(), &config, Arc::new(ThreeStageStubExecutor))
+            .await
+            .expect("run_engine must succeed");
+
+        assert!(
+            result.degradations.is_empty(),
+            "C3: a clean run must carry no degradations, got {:?}",
+            result.degradations
         );
     }
 }

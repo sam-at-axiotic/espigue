@@ -107,7 +107,7 @@ impl OpenRouterEmbeddingService {
                 "input": chunk,
                 "dimensions": self.dimensions,
             });
-            let resp = post_json_with_retry(
+            let parsed: EmbeddingResponse = post_json_with_retry(
                 &self.client,
                 &url,
                 &self.api_key,
@@ -133,13 +133,10 @@ impl OpenRouterEmbeddingService {
                         reason,
                     )
                 }
-            })?;
-
-            let parsed: EmbeddingResponse = resp.json().await.map_err(|e| {
-                degraded(
-                    format!("OpenRouter embeddings decode failed: {e}"),
-                    format!("OpenRouter embeddings returned invalid JSON: {e}"),
-                )
+                PostFailure::Decode { source, body } => degraded(
+                    format!("OpenRouter embeddings decode failed after retries: {source}; body: {body}"),
+                    format!("OpenRouter embeddings returned invalid JSON: {source}"),
+                ),
             })?;
 
             // Reorder defensively by the response `index` — never trust server
