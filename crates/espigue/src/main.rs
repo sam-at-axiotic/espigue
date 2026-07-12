@@ -58,7 +58,7 @@ struct Cli {
     profile: Option<String>,
 
     /// Generation model slug for the TTD stages.
-    #[arg(long, default_value = "google/gemini-2.5-flash")]
+    #[arg(long, default_value = "anthropic/claude-sonnet-5")]
     model: String,
 
     /// Stage-2 merger model slug for v2/v3 profiles (Opus, OpenRouter-shaped).

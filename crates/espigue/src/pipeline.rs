@@ -32,7 +32,7 @@ const TOP_K_HARD_CAP: usize = 50;
 /// Default `top_k`.
 pub const DEFAULT_TOP_K: usize = 10;
 /// Default generation model for the TTD stages (OpenRouter-shaped slug).
-pub const DEFAULT_MODEL: &str = "google/gemini-2.5-flash";
+pub const DEFAULT_MODEL: &str = "anthropic/claude-sonnet-5";
 /// Default v2/v3 Stage-2 merger model (provider-shaped Opus slug). Mirrors the
 /// daemon's `claude-opus-4-8` pin, but in OpenRouter form (the bare daemon slug
 /// 400s on OpenRouter).
