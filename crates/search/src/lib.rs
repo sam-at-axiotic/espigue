@@ -109,6 +109,11 @@ pub use lit_intake::{
     s2_client_for_lit,
 };
 
+// ── Capped HTTP body reads (T-lq4-02 extension) ──────────────────────────────
+// Bounded-read helpers shared by every non-PDF network reader in this crate
+// (arxiv/ar5iv, S2, Jina embed/rerank). Crate-private — a DoS guard, not API.
+mod http_cap;
+
 // ── F10 PDF fetch + pdftotext extraction ─────────────────────────────────────
 // `pdf_fetch` provides HTTP PDF byte fetching (scheme allowlist, size cap,
 // timeout) and `pdftotext` subprocess extraction with timeout + kill.

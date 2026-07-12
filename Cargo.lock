@@ -1876,6 +1876,7 @@ dependencies = [
  "base",
  "chrono",
  "futures",
+ "http",
  "libsqlite3-sys",
  "quick-xml",
  "rand 0.8.6",

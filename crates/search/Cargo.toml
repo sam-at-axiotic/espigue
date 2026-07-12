@@ -66,3 +66,6 @@ rand = { workspace = true, features = ["small_rng"] }
 # Phase 21 Plan 05: fan-out benchmark uses futures::future::join_all to
 # collect N=10 concurrent tokio::spawn handles in one await.
 futures = "0.3"
+# http_cap DoS-guard test: builds a streaming reqwest::Response with no
+# Content-Length so the chunk-loop cap path is exercised without a server.
+http = "1"

@@ -23,6 +23,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::http_cap::{read_body_capped, read_text_capped, API_BODY_MAX_BYTES};
 use base::error::{AlzinaError, AlzinaResult, SearchDetail};
 
 /// One S2 search hit. Snake-case for Rust ergonomics; the S2 wire shape uses
@@ -239,7 +240,9 @@ impl S2Client {
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_else(|_| "<unreadable>".into());
+            let body_text = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 search")
+                .await
+                .unwrap_or_else(|_| "<unreadable>".into());
             tracing::warn!(status = %status, body = %body_text, "S2 API non-2xx response");
             let reason = match status.as_u16() {
                 429 => "S2 rate-limited; retry later".to_string(),
@@ -253,7 +256,19 @@ impl S2Client {
             }));
         }
 
-        let parsed: WireS2Response = resp.json().await.map_err(|e| {
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 search")
+            .await
+            .map_err(|e| {
+                tracing::warn!(error = %e, "S2 API response body read failed");
+                AlzinaError::Search(SearchDetail {
+                    // "body read failed" keeps the espigue live-lane classifier's
+                    // transient bucket (pipeline.rs live_lane_error_is_transient).
+                    message: format!("S2 body read failed: {e}"),
+                    degraded: true,
+                    degradation_reason: Some(format!("S2 response unreadable: {e}")),
+                })
+            })?;
+        let parsed: WireS2Response = serde_json::from_slice(&raw_body).map_err(|e| {
             tracing::warn!(error = %e, "S2 API response JSON decode failed");
             AlzinaError::Search(SearchDetail {
                 message: format!("S2 response decode failed: {e}"),
@@ -507,7 +522,9 @@ impl S2Client {
             } else {
                 None
             };
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 get_paper")
+                .await
+                .unwrap_or_default();
             return Err(S2CallError {
                 status: Some(status.as_u16()),
                 retry_after,
@@ -515,7 +532,16 @@ impl S2Client {
             });
         }
 
-        let wire: WireS2FullPaper = resp.json().await.map_err(|e| S2CallError {
+        // status: None on read/decode failures (over-cap included) keeps them
+        // in the gateway's transient bucket — see S2CallError::into_retry_advice.
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 get_paper")
+            .await
+            .map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("get_paper body read: {e}"),
+            })?;
+        let wire: WireS2FullPaper = serde_json::from_slice(&raw_body).map_err(|e| S2CallError {
             status: None,
             retry_after: None,
             message: format!("get_paper decode: {e}"),
@@ -561,7 +587,9 @@ impl S2Client {
             } else {
                 None
             };
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 get_citations")
+                .await
+                .unwrap_or_default();
             return Err(S2CallError {
                 status: Some(status.as_u16()),
                 retry_after,
@@ -580,7 +608,14 @@ impl S2Client {
             citing_paper: Option<WireS2FullPaper>,
         }
 
-        let body: CitationsResponse = resp.json().await.map_err(|e| S2CallError {
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 get_citations")
+            .await
+            .map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("get_citations body read: {e}"),
+            })?;
+        let body: CitationsResponse = serde_json::from_slice(&raw_body).map_err(|e| S2CallError {
             status: None,
             retry_after: None,
             message: format!("get_citations decode: {e}"),
@@ -631,7 +666,9 @@ impl S2Client {
             } else {
                 None
             };
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 get_references")
+                .await
+                .unwrap_or_default();
             return Err(S2CallError {
                 status: Some(status.as_u16()),
                 retry_after,
@@ -650,7 +687,14 @@ impl S2Client {
             cited_paper: Option<WireS2FullPaper>,
         }
 
-        let body: ReferencesResponse = resp.json().await.map_err(|e| S2CallError {
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 get_references")
+            .await
+            .map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("get_references body read: {e}"),
+            })?;
+        let body: ReferencesResponse = serde_json::from_slice(&raw_body).map_err(|e| S2CallError {
             status: None,
             retry_after: None,
             message: format!("get_references decode: {e}"),
@@ -708,7 +752,9 @@ impl S2Client {
             } else {
                 None
             };
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 get_papers_batch")
+                .await
+                .unwrap_or_default();
             return Err(S2CallError {
                 status: Some(status.as_u16()),
                 retry_after,
@@ -716,12 +762,20 @@ impl S2Client {
             });
         }
 
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 get_papers_batch")
+            .await
+            .map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("get_papers_batch body read: {e}"),
+            })?;
         // Response is a JSON array, one entry per input id (may be null for not-found).
-        let raw: Vec<Option<WireS2FullPaper>> = resp.json().await.map_err(|e| S2CallError {
-            status: None,
-            retry_after: None,
-            message: format!("get_papers_batch decode: {e}"),
-        })?;
+        let raw: Vec<Option<WireS2FullPaper>> =
+            serde_json::from_slice(&raw_body).map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("get_papers_batch decode: {e}"),
+            })?;
 
         let results = raw
             .into_iter()
@@ -772,7 +826,9 @@ impl S2Client {
             } else {
                 None
             };
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_text_capped(resp, API_BODY_MAX_BYTES, "S2 search_papers")
+                .await
+                .unwrap_or_default();
             return Err(S2CallError {
                 status: Some(status.as_u16()),
                 retry_after,
@@ -786,7 +842,14 @@ impl S2Client {
             data: Vec<WireS2FullPaper>,
         }
 
-        let body: SearchResponse = resp.json().await.map_err(|e| S2CallError {
+        let raw_body = read_body_capped(resp, API_BODY_MAX_BYTES, "S2 search_papers")
+            .await
+            .map_err(|e| S2CallError {
+                status: None,
+                retry_after: None,
+                message: format!("search_papers body read: {e}"),
+            })?;
+        let body: SearchResponse = serde_json::from_slice(&raw_body).map_err(|e| S2CallError {
             status: None,
             retry_after: None,
             message: format!("search_papers decode: {e}"),
