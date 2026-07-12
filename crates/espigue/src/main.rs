@@ -14,6 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use espigue::context::{ContextConfig, LitContext};
@@ -275,9 +276,27 @@ fn write_outputs(out: &Path, result: &ReviewResult) -> anyhow::Result<(PathBuf, 
     std::fs::create_dir_all(out)?;
     let yaml_path = out.join("synthesis.yaml");
     let graph_path = out.join("graph.md");
-    std::fs::write(&yaml_path, &result.synthesis_yaml)?;
-    std::fs::write(&graph_path, &result.graph_markdown)?;
+    // yaml first: a crash between the two leaves the more valuable artifact in place.
+    write_atomic(&yaml_path, result.synthesis_yaml.as_bytes())?;
+    write_atomic(&graph_path, result.graph_markdown.as_bytes())?;
     Ok((yaml_path, graph_path))
+}
+
+/// Write `contents` to `path` via a `.tmp` file in the same directory plus
+/// rename, so `path` is only ever missing or complete — never truncated.
+/// Rename within one directory is atomic on POSIX.
+fn write_atomic(path: &Path, contents: &[u8]) -> anyhow::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    let write_result = std::fs::write(&tmp, contents)
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if let Err(err) = write_result {
+        // Best-effort cleanup; the original error is what matters.
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err).with_context(|| format!("writing {}", path.display()));
+    }
+    Ok(())
 }
 
 /// Pure exit-code decision for a completed review:
@@ -361,5 +380,17 @@ mod tests {
             "claims: []"
         );
         assert_eq!(std::fs::read_to_string(&graph_path).unwrap(), "# graph");
+    }
+
+    #[test]
+    fn write_outputs_leaves_no_tmp_files() {
+        let dir = tempfile::tempdir().unwrap();
+        write_outputs(dir.path(), &result("claims: []", false)).unwrap();
+        let leftovers: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "tmp files left behind: {leftovers:?}");
     }
 }
