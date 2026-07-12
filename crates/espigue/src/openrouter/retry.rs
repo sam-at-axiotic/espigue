@@ -34,16 +34,28 @@ pub(crate) struct RetryPolicy {
     /// retrying can pay for the same slow call up to three times. Embeddings
     /// calls are cheap and fast, so they keep it true.
     pub retry_post_send: bool,
+    /// Retry a 2xx whose body fails to read or decode into the target type.
+    /// This is a post-send failure (the generation may have completed and
+    /// billed), so it carries the same double-bill exposure as
+    /// `retry_post_send`. Both policies set it true anyway: a transient
+    /// truncated body — or an OpenRouter provider error wrapped in a 200,
+    /// which is common and unbilled — otherwise discards the whole run at its
+    /// most expensive point (the final merge). Bounded by `max_attempts`, so
+    /// worst case is a few duplicate calls, not an unbounded spend.
+    pub retry_body_decode: bool,
 }
 
 impl RetryPolicy {
-    /// Policy for `POST /chat/completions` — post-send failures do not retry.
+    /// Policy for `POST /chat/completions` — post-send transport failures do
+    /// not retry, but a transient body-decode failure does (see
+    /// `retry_body_decode`).
     pub(crate) const fn chat() -> Self {
         Self {
             max_attempts: 3,
             backoff_base: Duration::from_secs(2),
             max_wait: Duration::from_secs(60),
             retry_post_send: false,
+            retry_body_decode: true,
         }
     }
 
@@ -67,22 +79,35 @@ pub(crate) enum PostFailure {
         status: reqwest::StatusCode,
         body: String,
     },
+    /// A 2xx response whose body could not be read or decoded into the target
+    /// type, after retries. Carries a body snippet for diagnosis (empty when
+    /// the body read itself failed).
+    Decode {
+        source: String,
+        body: String,
+    },
 }
 
+/// Cap on the body snippet kept in a [`PostFailure::Decode`] for logs/errors.
+const DECODE_BODY_SNIPPET: usize = 500;
+
 /// POST `body` to `url` with OpenRouter auth + attribution headers, retrying
-/// transient failures per `policy`. Returns the first 2xx response.
+/// transient failures per `policy`, and decoding the 2xx body into `T`.
 ///
-/// Transient = HTTP 429, any 5xx, a connect-phase transport error, or (when
-/// `policy.retry_post_send`) any transport error. Anything else is fatal on
-/// first sight. `what` labels log lines ("chat", "embeddings").
-pub(crate) async fn post_json_with_retry(
+/// Transient = HTTP 429, any 5xx, a connect-phase transport error, a 2xx body
+/// that fails to read or decode (when `policy.retry_body_decode`), or any
+/// transport error (when `policy.retry_post_send`). Anything else is fatal on
+/// first sight. The body decode runs inside the retry loop so a transient
+/// truncated or provider-error body re-fires the call rather than discarding
+/// the run. `what` labels log lines ("chat", "embeddings").
+pub(crate) async fn post_json_with_retry<T: serde::de::DeserializeOwned>(
     client: &reqwest::Client,
     url: &str,
     api_key: &str,
     body: &serde_json::Value,
     what: &str,
     policy: &RetryPolicy,
-) -> Result<reqwest::Response, PostFailure> {
+) -> Result<T, PostFailure> {
     let mut attempt: u32 = 1;
     loop {
         let sent = client
@@ -97,7 +122,39 @@ pub(crate) async fn post_json_with_retry(
 
         let mut wait_hint: Option<Duration> = None;
         match sent {
-            Ok(resp) if resp.status().is_success() => return Ok(resp),
+            Ok(resp) if resp.status().is_success() => {
+                // Read + decode inside the loop: a transient truncated body or
+                // a provider error wrapped in a 200 is retryable per policy,
+                // not a run-ending failure at the caller.
+                let raw = match resp.bytes().await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        if !policy.retry_body_decode || attempt >= policy.max_attempts {
+                            tracing::warn!(error = %e, attempt, what, "OpenRouter body read failed (terminal)");
+                            return Err(PostFailure::Decode { source: e.to_string(), body: String::new() });
+                        }
+                        tracing::warn!(error = %e, attempt, what, "OpenRouter body read failed; retrying");
+                        sleep_backoff(policy, None, attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                };
+                match serde_json::from_slice::<T>(&raw) {
+                    Ok(val) => return Ok(val),
+                    Err(e) => {
+                        let snippet: String =
+                            String::from_utf8_lossy(&raw).chars().take(DECODE_BODY_SNIPPET).collect();
+                        if !policy.retry_body_decode || attempt >= policy.max_attempts {
+                            tracing::warn!(attempt, what, body = %snippet, "OpenRouter body decode failed (terminal)");
+                            return Err(PostFailure::Decode { source: e.to_string(), body: snippet });
+                        }
+                        tracing::warn!(attempt, what, body = %snippet, "OpenRouter body decode failed; retrying");
+                        sleep_backoff(policy, None, attempt).await;
+                        attempt += 1;
+                        continue;
+                    }
+                }
+            }
             Ok(resp) => {
                 let status = resp.status();
                 let transient = status.as_u16() == 429 || status.is_server_error();
@@ -132,18 +189,24 @@ pub(crate) async fn post_json_with_retry(
             }
         }
 
-        // Jitter breaks the lockstep herd: N concurrent callers that hit the
-        // same 429 otherwise sleep the same wait — the server's Retry-After
-        // included — and re-fire simultaneously. The server value is a
-        // floor, not a schedule. Jitter lands AFTER the cap so hitting
-        // max_wait cannot re-synchronize the herd.
-        let wait = wait_hint
-            .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1))
-            .min(policy.max_wait)
-            + jitter();
-        tokio::time::sleep(wait).await;
+        sleep_backoff(policy, wait_hint, attempt).await;
         attempt += 1;
     }
+}
+
+/// Sleep before the next attempt: honour a server `Retry-After` (`wait_hint`)
+/// else exponential backoff, capped, then jittered.
+///
+/// Jitter breaks the lockstep herd: N concurrent callers that hit the same 429
+/// otherwise sleep the same wait — the server's Retry-After included — and
+/// re-fire simultaneously. The server value is a floor, not a schedule. Jitter
+/// lands AFTER the cap so hitting `max_wait` cannot re-synchronize the herd.
+async fn sleep_backoff(policy: &RetryPolicy, wait_hint: Option<Duration>, attempt: u32) {
+    let wait = wait_hint
+        .unwrap_or_else(|| policy.backoff_base * 2u32.saturating_pow(attempt - 1))
+        .min(policy.max_wait)
+        + jitter();
+    tokio::time::sleep(wait).await;
 }
 
 /// 0–250ms of jitter from `RandomState`'s per-instance random keys — real
@@ -198,6 +261,7 @@ mod tests {
             backoff_base: Duration::from_millis(10),
             max_wait: Duration::from_millis(50),
             retry_post_send,
+            retry_body_decode: true,
         }
     }
 
@@ -220,7 +284,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let err = post_json_with_retry(
+        let err = post_json_with_retry::<serde_json::Value>(
             &short_timeout_client(),
             &format!("{}/x", server.uri()),
             "k",
@@ -247,12 +311,12 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/x"))
-            .respond_with(ResponseTemplate::new(200))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
             .expect(1)
             .mount(&server)
             .await;
 
-        let resp = post_json_with_retry(
+        let val = post_json_with_retry::<serde_json::Value>(
             &reqwest::Client::new(),
             &format!("{}/x", server.uri()),
             "k",
@@ -262,7 +326,7 @@ mod tests {
         )
         .await
         .expect("must recover via the backoff branch");
-        assert!(resp.status().is_success());
+        assert_eq!(val, json!({"ok": true}));
     }
 
     #[tokio::test]
@@ -276,7 +340,7 @@ mod tests {
         drop(listener);
 
         let started = std::time::Instant::now();
-        let err = post_json_with_retry(
+        let err = post_json_with_retry::<serde_json::Value>(
             &reqwest::Client::new(),
             &url,
             "k",
@@ -303,7 +367,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let err = post_json_with_retry(
+        let err = post_json_with_retry::<serde_json::Value>(
             &short_timeout_client(),
             &format!("{}/x", server.uri()),
             "k",
@@ -314,5 +378,67 @@ mod tests {
         .await
         .expect_err("persistent timeout must still fail");
         assert!(matches!(err, PostFailure::Transport(_)));
+    }
+
+    #[tokio::test]
+    async fn undecodable_2xx_body_retries_then_recovers() {
+        // The regression: a 200 whose body cannot be decoded into the target
+        // type (a transient truncation, or a provider error wrapped in a 200)
+        // must retry inside the loop rather than fail the caller. First 200
+        // returns garbage; the retry returns valid JSON.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json <<<"))
+            .up_to_n_times(1)
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"ok": true})))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let val = post_json_with_retry::<serde_json::Value>(
+            &reqwest::Client::new(),
+            &format!("{}/x", server.uri()),
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(false), // chat-shaped: post-send off, decode-retry on
+        )
+        .await
+        .expect("undecodable body must retry and recover");
+        assert_eq!(val, json!({"ok": true}));
+    }
+
+    #[tokio::test]
+    async fn persistent_undecodable_body_fails_as_decode() {
+        // Exhausting attempts on an undecodable body surfaces PostFailure::Decode
+        // with a body snippet — not a silent success or a Transport error.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/x"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("garbage-body"))
+            .expect(3) // all attempts spent
+            .mount(&server)
+            .await;
+
+        let err = post_json_with_retry::<serde_json::Value>(
+            &reqwest::Client::new(),
+            &format!("{}/x", server.uri()),
+            "k",
+            &json!({}),
+            "test",
+            &fast_policy(false),
+        )
+        .await
+        .expect_err("persistent garbage body must fail");
+        match err {
+            PostFailure::Decode { body, .. } => assert!(body.contains("garbage-body")),
+            other => panic!("expected Decode, got {other:?}"),
+        }
     }
 }

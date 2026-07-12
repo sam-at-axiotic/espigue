@@ -98,7 +98,7 @@ impl OpenRouterExecutor {
         }
 
         let url = format!("{}/chat/completions", self.base_url);
-        let resp = post_json_with_retry(
+        let parsed: ChatCompletion = post_json_with_retry(
             &self.client,
             &url,
             &self.api_key,
@@ -114,10 +114,9 @@ impl OpenRouterExecutor {
             PostFailure::Http { status, body } => {
                 AlzinaError::Orchestration(format!("OpenRouter chat HTTP {status}: {body}"))
             }
-        })?;
-
-        let parsed: ChatCompletion = resp.json().await.map_err(|e| {
-            AlzinaError::Orchestration(format!("OpenRouter chat response decode failed: {e}"))
+            PostFailure::Decode { source, body } => AlzinaError::Orchestration(format!(
+                "OpenRouter chat response decode failed after retries: {source}; body: {body}"
+            )),
         })?;
 
         parsed
