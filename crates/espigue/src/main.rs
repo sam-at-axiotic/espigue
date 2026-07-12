@@ -11,7 +11,8 @@
 //! espigue --scope corpus-only "my question"   # cite only local docs
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -20,7 +21,8 @@ use espigue::ingest::ingest_dir;
 use espigue::openrouter::embeddings::{DEFAULT_DIMENSIONS, DEFAULT_MODEL};
 use espigue::openrouter::rerank::DEFAULT_RERANK_MODEL;
 use espigue::pipeline::{
-    parse_prompt_profile, run_review, ReviewOptions, Scope, DEFAULT_MERGER_MODEL, DEFAULT_TOP_K,
+    parse_prompt_profile, run_review, ReviewOptions, ReviewResult, Scope, DEFAULT_MERGER_MODEL,
+    DEFAULT_TOP_K,
 };
 
 /// Standalone literature-review synthesis over OpenRouter + arXiv (+ optional S2).
@@ -118,8 +120,17 @@ impl From<ScopeArg> for Scope {
     }
 }
 
+/// Exit codes for the review path (`exit_for` maps a [`ReviewResult`] onto
+/// these; `main` converts to [`ExitCode`]):
+/// - `0` — clean success, outputs written.
+/// - `1` — empty output; nothing written (also the generic error code).
+/// - `2` — degraded but usable output; files written, notice printed.
+const EXIT_CLEAN: u8 = 0;
+const EXIT_EMPTY: u8 = 1;
+const EXIT_DEGRADED: u8 = 2;
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -128,6 +139,16 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
+    match run().await {
+        Ok(code) => ExitCode::from(code),
+        Err(err) => {
+            eprintln!("Error: {err:?}");
+            ExitCode::from(EXIT_EMPTY)
+        }
+    }
+}
+
+async fn run() -> anyhow::Result<u8> {
     let cli = Cli::parse();
 
     let api_key = std::env::var("OPENROUTER_API_KEY").map_err(|_| {
@@ -148,7 +169,10 @@ async fn main() -> anyhow::Result<()> {
     let ctx = LitContext::open(cfg).await?;
 
     match &cli.command {
-        Some(Command::Ingest { dir }) => run_ingest(dir, &ctx).await,
+        Some(Command::Ingest { dir }) => {
+            run_ingest(dir, &ctx).await?;
+            Ok(EXIT_CLEAN)
+        }
         None => run_review_cmd(&cli, &ctx).await,
     }
 }
@@ -175,7 +199,7 @@ async fn run_ingest(dir: &std::path::Path, ctx: &LitContext) -> anyhow::Result<(
     Ok(())
 }
 
-async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<()> {
+async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
     let question = cli.question.as_deref().ok_or_else(|| {
         anyhow::anyhow!("no question given (usage: espigue \"your question\", or `espigue ingest <dir>`)")
     })?;
@@ -207,14 +231,25 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<()> {
 
     let result = run_review(question, &opts, ctx).await?;
 
-    std::fs::create_dir_all(&cli.out)?;
-    let yaml_path = cli.out.join("synthesis.yaml");
-    let graph_path = cli.out.join("graph.md");
-    std::fs::write(&yaml_path, &result.synthesis_yaml)?;
-    std::fs::write(&graph_path, &result.graph_markdown)?;
-
     println!("run_id:       {}", result.run_id);
     println!("bibliography: {} sources", result.bib_count);
+
+    if result.synthesis_yaml.is_empty() {
+        // Degraded to the point of no output: do NOT clobber a previous good
+        // synthesis.yaml/graph.md pair, and fail loudly (exit 1 via main).
+        if !result.notice.is_empty() {
+            println!("\n{}", result.notice);
+        }
+        let reason = if result.notice.is_empty() {
+            "engine returned no output"
+        } else {
+            result.notice.as_str()
+        };
+        anyhow::bail!("review produced no synthesis — no output files written ({reason})");
+    }
+
+    let (yaml_path, graph_path) = write_outputs(&cli.out, &result)?;
+
     println!("synthesis:    {}", yaml_path.display());
     println!("graph:        {}", graph_path.display());
     if result.degraded {
@@ -226,5 +261,105 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<()> {
         println!("\n=== NARRATIVE ===\n{}", result.narrative);
     }
 
-    Ok(())
+    Ok(exit_for(&result))
+}
+
+/// Write `synthesis.yaml` + `graph.md` into `out`, returning their paths.
+///
+/// Refuses to write anything when `synthesis_yaml` is empty so a degraded run
+/// never overwrites a previous good pair.
+fn write_outputs(out: &Path, result: &ReviewResult) -> anyhow::Result<(PathBuf, PathBuf)> {
+    if result.synthesis_yaml.is_empty() {
+        anyhow::bail!("refusing to write empty synthesis output to {}", out.display());
+    }
+    std::fs::create_dir_all(out)?;
+    let yaml_path = out.join("synthesis.yaml");
+    let graph_path = out.join("graph.md");
+    std::fs::write(&yaml_path, &result.synthesis_yaml)?;
+    std::fs::write(&graph_path, &result.graph_markdown)?;
+    Ok((yaml_path, graph_path))
+}
+
+/// Pure exit-code decision for a completed review:
+/// empty output → 1, degraded-but-usable → 2, clean → 0.
+fn exit_for(result: &ReviewResult) -> u8 {
+    if result.synthesis_yaml.is_empty() {
+        EXIT_EMPTY
+    } else if result.degraded {
+        EXIT_DEGRADED
+    } else {
+        EXIT_CLEAN
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result(synthesis_yaml: &str, degraded: bool) -> ReviewResult {
+        ReviewResult {
+            synthesis_yaml: synthesis_yaml.to_string(),
+            graph_markdown: "# graph".to_string(),
+            run_id: "test-run".to_string(),
+            bib_count: 0,
+            narrative: String::new(),
+            degraded,
+            notice: if degraded {
+                "degraded: test notice".to_string()
+            } else {
+                String::new()
+            },
+        }
+    }
+
+    #[test]
+    fn exit_for_empty_output_is_1() {
+        assert_eq!(exit_for(&result("", true)), EXIT_EMPTY);
+        // Empty output wins even if the degraded flag was somehow left unset.
+        assert_eq!(exit_for(&result("", false)), EXIT_EMPTY);
+    }
+
+    #[test]
+    fn exit_for_degraded_with_output_is_2() {
+        assert_eq!(exit_for(&result("claims: []", true)), EXIT_DEGRADED);
+    }
+
+    #[test]
+    fn exit_for_clean_is_0() {
+        assert_eq!(exit_for(&result("claims: []", false)), EXIT_CLEAN);
+    }
+
+    #[test]
+    fn write_outputs_refuses_empty_and_preserves_previous_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let yaml_path = dir.path().join("synthesis.yaml");
+        let graph_path = dir.path().join("graph.md");
+        std::fs::write(&yaml_path, "previous good yaml").unwrap();
+        std::fs::write(&graph_path, "previous good graph").unwrap();
+
+        let err = write_outputs(dir.path(), &result("", true));
+        assert!(err.is_err(), "empty synthesis must not be written");
+
+        // The previous good pair is untouched.
+        assert_eq!(
+            std::fs::read_to_string(&yaml_path).unwrap(),
+            "previous good yaml"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&graph_path).unwrap(),
+            "previous good graph"
+        );
+    }
+
+    #[test]
+    fn write_outputs_writes_pair_on_nonempty() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("nested"); // also covers create_dir_all
+        let (yaml_path, graph_path) = write_outputs(&out, &result("claims: []", false)).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&yaml_path).unwrap(),
+            "claims: []"
+        );
+        assert_eq!(std::fs::read_to_string(&graph_path).unwrap(), "# graph");
+    }
 }
