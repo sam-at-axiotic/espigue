@@ -1690,6 +1690,47 @@ struct PreNotices {
     seed: Option<String>,
 }
 
+/// Cap on engine degradation reasons shown verbatim in the notice; the rest
+/// fold into "and N more" (a 5-trajectory stage can trip the same guard 5
+/// times — the notice must stay readable).
+const MAX_DEGRADATION_REASONS: usize = 3;
+
+/// Fold engine-internal degradation reasons (C3: bibliography write failures,
+/// resource-guard truncations) into the composed `(degraded, notice)` pair.
+///
+/// - Empty reasons: pass-through, nothing changes.
+/// - Non-empty reasons ALWAYS flip `degraded` to true. When a notice already
+///   leads, the reasons are appended with the house `"; "` separator (appended,
+///   never replacing); otherwise they start a fresh
+///   `"⚠ Synthesis degraded: ..."` notice.
+/// - Exact-duplicate reasons are dropped (order preserved); at most
+///   [`MAX_DEGRADATION_REASONS`] are shown, then `" (and N more)"`.
+fn fold_engine_degradations(
+    degraded: bool,
+    notice: String,
+    degradations: &[String],
+) -> (bool, String) {
+    if degradations.is_empty() {
+        return (degraded, notice);
+    }
+    let mut seen = std::collections::HashSet::new();
+    let unique: Vec<&String> = degradations.iter().filter(|r| seen.insert(r.as_str())).collect();
+    let mut folded = unique
+        .iter()
+        .take(MAX_DEGRADATION_REASONS)
+        .map(|r| r.as_str())
+        .collect::<Vec<_>>()
+        .join("; ");
+    if unique.len() > MAX_DEGRADATION_REASONS {
+        folded.push_str(&format!(" (and {} more)", unique.len() - MAX_DEGRADATION_REASONS));
+    }
+    if degraded {
+        (true, format!("{notice}; {folded}"))
+    } else {
+        (true, format!("⚠ Synthesis degraded: {folded}"))
+    }
+}
+
 /// Shared tail of a review run: full-text coverage accounting → stage
 /// retrievers → TTD engine → bibliography count → notice composition.
 /// Extracted verbatim from [`run_review`] so [`resume_review`] re-enters the
@@ -1852,8 +1893,12 @@ async fn run_engine_and_finish(
         "ttd_perf: run_engine_with_bib"
     );
 
+    // C3: engine-internal degradations (bib-write failures, guard truncations)
+    // arrive on the success path — captured here, folded into the notice below.
+    let mut engine_degradations: Vec<String> = Vec::new();
     let (synthesis_yaml, graph_markdown, narrative, run_degraded, run_notice) = match engine_result {
         Ok(mut result) => {
+            engine_degradations = std::mem::take(&mut result.degradations);
             let graph_markdown = result.graph.to_markdown();
             let narrative = result.synthesis.narrative.clone();
             let yaml = match profile {
@@ -1930,6 +1975,9 @@ async fn run_engine_and_finish(
     } else {
         (false, String::new())
     };
+    // C3: engine-internal degradations flip the run degraded and append their
+    // reasons — never replacing the notices above.
+    let (degraded, notice) = fold_engine_degradations(degraded, notice, &engine_degradations);
     let (degraded, notice) = match coverage_notice {
         Some(c) if !degraded => (true, format!("⚠ Synthesis degraded: {c}")),
         Some(c) => (degraded, format!("{notice}; {c}")),
@@ -2471,5 +2519,67 @@ mod tests {
                  current HEAD head1"
             )
         );
+    }
+
+    // ── C3: engine degradations fold into degraded + notice ──────────────────
+
+    /// A result built from an engine run WITH degradations must come out
+    /// degraded, with the reason in the notice under the house prefix.
+    #[test]
+    fn fold_engine_degradations_flips_degraded_and_prefixes() {
+        let reason = "bibliography write failed at stage graph step 0: DB locked".to_string();
+        let (degraded, notice) =
+            fold_engine_degradations(false, String::new(), &[reason.clone()]);
+        assert!(degraded, "C3: engine degradations must set degraded=true");
+        assert!(
+            notice.starts_with("⚠ Synthesis degraded: "),
+            "C3: notice must lead with the house prefix, got {notice:?}"
+        );
+        assert!(notice.contains(&reason), "C3: notice must carry the reason verbatim");
+    }
+
+    /// When an earlier notice already leads, degradation reasons append with
+    /// the house "; " separator — never replacing it. Duplicates fold away and
+    /// the shown reasons cap at MAX_DEGRADATION_REASONS + "and N more".
+    #[test]
+    fn fold_engine_degradations_appends_dedups_and_caps() {
+        let reasons: Vec<String> = vec![
+            "stage narrative trajectory 0 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 0 truncated by wall-clock guard".into(), // dup — dropped
+            "stage narrative trajectory 1 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 2 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 3 truncated by wall-clock guard".into(),
+            "stage narrative trajectory 4 truncated by wall-clock guard".into(),
+        ];
+        let prior = "⚠ Synthesis degraded (partial sources): arXiv lane down".to_string();
+        let (degraded, notice) = fold_engine_degradations(true, prior.clone(), &reasons);
+        assert!(degraded);
+        assert!(
+            notice.starts_with(&format!("{prior}; ")),
+            "C3: reasons are appended, never replacing the earlier notice: {notice:?}"
+        );
+        assert!(notice.contains("trajectory 0"));
+        assert!(
+            notice.contains("(and 2 more)"),
+            "C3: 5 unique reasons cap at 3 shown + 'and 2 more', got {notice:?}"
+        );
+        assert!(
+            !notice.contains("trajectory 4"),
+            "C3: reasons past the cap must fold into the count, got {notice:?}"
+        );
+    }
+
+    /// No degradations → pass-through: a clean run stays clean.
+    #[test]
+    fn fold_engine_degradations_passthrough_when_clean() {
+        let (degraded, notice) = fold_engine_degradations(false, String::new(), &[]);
+        assert!(!degraded);
+        assert!(notice.is_empty());
+
+        // Existing degraded state passes through untouched too.
+        let (degraded, notice) =
+            fold_engine_degradations(true, "⚠ Synthesis degraded: x".into(), &[]);
+        assert!(degraded);
+        assert_eq!(notice, "⚠ Synthesis degraded: x");
     }
 }

@@ -434,6 +434,15 @@ impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
             {
                 // Return best-so-far: break out of the step loop for this
                 // trajectory. The trajectory's current draft is preserved.
+                // C3: break-and-keep-best is a quality truncation — report it
+                // so the envelope can mark the run degraded instead of
+                // shipping silent success.
+                self.config.degradation_sink.push(format!(
+                    "stage {stage} trajectory {trajectory} truncated by wall-clock guard \
+                     at denoise step {step} ({elapsed_secs:.0}s > {max}s); best-so-far kept",
+                    stage = self.stage_label,
+                    max = self.config.max_stage_seconds,
+                ));
                 break;
             }
 
@@ -452,6 +461,16 @@ impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
                 self.config.max_llm_calls,
             ) == GuardOutcome::Stop
             {
+                // C3: silent quality truncation — report it (see Guard 1).
+                self.config.degradation_sink.push(format!(
+                    "stage {stage} trajectory {trajectory} truncated by budget guard before \
+                     fitness at denoise step {step} ({calls} calls + {judges} judges > max \
+                     {max}); best-so-far kept",
+                    stage = self.stage_label,
+                    calls = state.llm_calls,
+                    judges = fitness_call_count,
+                    max = self.config.max_llm_calls,
+                ));
                 break;
             }
 
@@ -626,9 +645,9 @@ impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
                     // bibliography while the run reports success. The store
                     // builds its own degradation_reason (bib_store.rs) — surface
                     // it at `warn`, not `debug`, so partial-corpus loss is
-                    // visible in operations. (Envelope-level propagation out of
-                    // the engine return type is a structural follow-up — flagged
-                    // to Muninn/Skuld, not bundled into this error-path guard.)
+                    // visible in operations. C3 closes the envelope-level
+                    // propagation follow-up: the sink reason reaches
+                    // `EngineResult.degradations` and flips the run degraded.
                     tracing::warn!(
                         error = %e,
                         run_id = %self.run_id,
@@ -636,6 +655,10 @@ impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
                         step,
                         "bib_store.record_sources failed — bibliography fusion degraded (non-fatal); continuing"
                     );
+                    self.config.degradation_sink.push(format!(
+                        "bibliography write failed at stage {stage} step {step}: {e}",
+                        stage = self.stage_label,
+                    ));
                 }
             }
 
@@ -660,6 +683,20 @@ impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
             if budget_after_step_guard(state.llm_calls, self.config.max_llm_calls)
                 == GuardOutcome::Stop
             {
+                // C3: silent quality truncation — report it (see Guard 1).
+                // Only when steps remained: a Stop after the FINAL step cuts
+                // nothing (the loop was ending anyway), so reporting it would
+                // be a false degradation.
+                if step + 1 < self.config.n_denoise_steps {
+                    self.config.degradation_sink.push(format!(
+                        "stage {stage} trajectory {trajectory} truncated by budget guard \
+                         after denoise step {step} ({calls} calls > max {max}); \
+                         best-so-far kept",
+                        stage = self.stage_label,
+                        calls = state.llm_calls,
+                        max = self.config.max_llm_calls,
+                    ));
+                }
                 break;
             }
         }
@@ -2234,5 +2271,87 @@ mod tests {
                 "F3: zero-draft fan-out must yield NoCandidates, got {result:?}"
             );
         }
+    }
+
+    // ── C3: degradation sink — guard truncations reach the envelope ──────────
+
+    /// Build a standard mock machine over the given config, sharing its
+    /// degradation sink with the caller.
+    fn machine_with_config(config: TtdConfig) -> TtdMachine<String> {
+        TtdMachine {
+            config,
+            draft_gen: Arc::new(CountingDraftGen { count: Arc::new(AtomicUsize::new(0)) }),
+            gap_identify: Box::new(CountingGapIdentify { count: Arc::new(AtomicUsize::new(0)) }),
+            gap_resolve: Box::new(NoopResolve),
+            eval_fitness: Some(Box::new(CountingEvalFitness { count: Arc::new(AtomicUsize::new(0)) })),
+            merger: Box::new(FirstMerger),
+            retriever: Box::new(NoopRetriever),
+            executor: make_executor(Arc::new(AtomicUsize::new(0))),
+            bib_store: Arc::new(NoopBibliographyStore),
+            run_id: String::new(),
+            stage_label: "test".to_string(),
+        }
+    }
+
+    /// C3: a budget guard tripping mid-stage must push a truncation reason
+    /// into the shared degradation sink — the previously-silent
+    /// break-and-keep-best path becomes visible at the envelope.
+    #[tokio::test]
+    async fn budget_guard_truncation_reports_degradation() {
+        let mut config = TtdConfig::default();
+        config.n_initial_drafts = 1;
+        config.n_denoise_steps = 2;
+        // 0 calls + 6 judge spawns > 1 → budget-before-fitness fires at step 0.
+        config.max_llm_calls = 1;
+        let sink = config.degradation_sink.clone();
+
+        let result = machine_with_config(config).run(&make_inputs()).await;
+        assert!(result.is_ok(), "guard truncation keeps best-so-far, never errors: {result:?}");
+
+        let reasons = sink.drain();
+        assert!(
+            !reasons.is_empty(),
+            "C3: a tripped budget guard must report a degradation reason"
+        );
+        assert!(
+            reasons.iter().any(|r| r.contains("budget guard") && r.contains("truncated")),
+            "C3: reason must name the budget guard truncation, got {reasons:?}"
+        );
+    }
+
+    /// C3: the wall-clock guard tripping must also push a truncation reason
+    /// (max_stage_seconds=0 trips the strictly-greater check immediately).
+    #[tokio::test]
+    async fn wall_clock_truncation_reports_degradation() {
+        let mut config = TtdConfig::default();
+        config.n_initial_drafts = 1;
+        config.n_denoise_steps = 1;
+        config.max_stage_seconds = 0; // any elapsed time > 0s → Stop at step 0
+        let sink = config.degradation_sink.clone();
+
+        let result = machine_with_config(config).run(&make_inputs()).await;
+        assert!(result.is_ok(), "wall-clock truncation keeps best-so-far: {result:?}");
+
+        let reasons = sink.drain();
+        assert!(
+            reasons.iter().any(|r| r.contains("wall-clock guard") && r.contains("truncated")),
+            "C3: reason must name the wall-clock guard truncation, got {reasons:?}"
+        );
+    }
+
+    /// C3: a clean run (no guard trips, no bib failures) leaves the sink empty —
+    /// no false degradation reports.
+    #[tokio::test]
+    async fn clean_run_reports_no_degradations() {
+        let config = TtdConfig::default(); // N=5, S=2, budget 1000 — nothing trips
+        let sink = config.degradation_sink.clone();
+
+        machine_with_config(config).run(&make_inputs()).await.unwrap();
+
+        let reasons = sink.drain();
+        assert!(
+            reasons.is_empty(),
+            "C3: a clean run must report zero degradations, got {reasons:?}"
+        );
     }
 }

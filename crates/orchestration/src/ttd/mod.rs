@@ -58,7 +58,7 @@ pub mod weights;
 // Re-export the primary types needed by callers (Wave 1+ plan tasks).
 pub use artifact::{ArgumentationGraph, SynthesisArtifact, SCHEMA_VERSION};
 pub use term_sheet::{JudgeDim, PromptProfile, V2_JUDGE_DIMS};
-pub use config::TtdConfig;
+pub use config::{DegradationSink, TtdConfig};
 pub use fitness::{FitnessEval, ParsedFitnessScore, generate_feedback, is_valid_graph, is_valid_synthesis, is_valid_v2, traceability_veto_synthesis, traceability_veto_graph, parse_fitness_response, sort_candidates_best_first, weighted_sum};
 pub use mod_types::TtdError;
 pub use plan::{PlanMode, PlanTournamentOutcome, ReviewPlan, run_plan_tournament};

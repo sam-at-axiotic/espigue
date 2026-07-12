@@ -272,6 +272,17 @@ impl EngineConfig {
         self
     }
 
+    /// Inject a shared degradation sink (C3). Optional, like the other seams:
+    /// `EngineConfig::new` already carries a fresh private sink (via
+    /// `TtdConfig::default`), and `run_engine_with_bib` drains it into
+    /// `EngineResult.degradations`. Inject your own handle only to observe
+    /// degradations mid-run, or after a hard engine failure (when no
+    /// `EngineResult` materialises and the sink keeps its contents).
+    pub fn with_degradation_sink(mut self, sink: crate::ttd::config::DegradationSink) -> Self {
+        self.ttd_config.degradation_sink = sink;
+        self
+    }
+
     /// Set the research question text, verbatim from the caller.
     ///
     /// Threaded (via `ttd_config.question`) into every v2/v3 prompt that
@@ -367,6 +378,12 @@ pub struct EngineResult {
     pub yaml: String,
     /// The governance record from the artifact emit step.
     pub emit_record: TtdEmitRecord,
+    /// Engine-internal degradations that did not kill the run (C3): bibliography
+    /// write failures and resource-guard truncations, drained from the shared
+    /// [`DegradationSink`] on `ttd_config`. Empty on a clean run. Non-empty
+    /// means the output is usable but partial — callers must surface it
+    /// (espigue folds it into `ReviewResult.degraded`/`notice`, which exits 2).
+    pub degradations: Vec<String>,
 }
 
 /// Run the full three-stage TTD engine.
@@ -770,11 +787,26 @@ pub async fn run_engine_with_bib(
         "ttd_perf: engine run complete (all three stages)"
     );
 
+    // C3: drain the shared degradation sink into the result envelope. The
+    // stage machines pushed a reason for every bibliography write failure and
+    // every guard truncation (break-and-keep-best); a successful return with
+    // a non-empty list is a degraded-but-usable run, not a clean one.
+    // Draining (not snapshotting) keeps a reused config from double-reporting.
+    let degradations = config.ttd_config.degradation_sink.drain();
+    if !degradations.is_empty() {
+        tracing::warn!(
+            run_id = %config.run_id,
+            n_degradations = degradations.len(),
+            "engine completed WITH internal degradations — output is best-so-far, not full-fidelity"
+        );
+    }
+
     Ok(EngineResult {
         synthesis: final_synthesis,
         graph,
         yaml,
         emit_record,
+        degradations,
     })
 }
 
@@ -2236,5 +2268,89 @@ mod tests {
         run_engine(&stub_panel(), &config, Arc::new(ThreeStageStubExecutor))
             .await
             .expect("a failing checkpoint store must never kill the run");
+    }
+
+    // ── C3: silent engine degradation reaches EngineResult.degradations ──────
+
+    /// BibliographyStore whose record_sources always fails — the locked/full/
+    /// drifted-DB scenario that previously degraded the bibliography silently.
+    struct FailingBibStore;
+
+    #[async_trait]
+    impl BibliographyStore for FailingBibStore {
+        async fn record_sources(
+            &self,
+            _run_id: &str,
+            _stage: &str,
+            _step: usize,
+            _sources: &[BibEntry],
+        ) -> base::AlzinaResult<()> {
+            Err(stub_err("stub: bibliography DB locked"))
+        }
+    }
+
+    /// C3: a bib store that fails every write must NOT kill the run, but the
+    /// loss must surface in `EngineResult.degradations` (envelope propagation
+    /// of the run.rs warn-and-continue path).
+    #[tokio::test]
+    async fn failing_bib_store_reports_degradation_in_result() {
+        // GapReturningStubExecutor guarantees a gap; OneSourceRetriever makes
+        // retrieval non-empty, so the bib write (and its failure) fires.
+        let config = EngineConfig::new(
+            "test-agent",
+            "google/gemini-2.5-flash",
+            "study-c3",
+            "round-1",
+            "q-c3",
+        )
+        .with_run_id("weave-c3-bib")
+        .with_retriever(Arc::new(OneSourceRetriever));
+
+        let mut ttd_config = config.ttd_config.clone();
+        ttd_config.n_initial_drafts = 1;
+        ttd_config.n_denoise_steps = 1;
+        let config = EngineConfig { ttd_config, ..config };
+
+        let result = run_engine_with_bib(
+            &stub_panel(),
+            &config,
+            Arc::new(GapReturningStubExecutor),
+            Arc::new(FailingBibStore),
+        )
+        .await
+        .expect("a failing bib store must never kill the run (warn-and-continue)");
+
+        assert!(
+            !result.degradations.is_empty(),
+            "C3: failed bibliography writes must surface in EngineResult.degradations"
+        );
+        assert!(
+            result
+                .degradations
+                .iter()
+                .any(|d| d.contains("bibliography write failed")),
+            "C3: degradation reason must name the bibliography write, got {:?}",
+            result.degradations
+        );
+    }
+
+    /// C3: a clean engine run reports zero degradations — no false positives.
+    #[tokio::test]
+    async fn clean_engine_run_has_empty_degradations() {
+        let mut config = EngineConfig::new(
+            "test-agent", "google/gemini-2.5-flash", "study-c3", "round-1", "q-c3",
+        );
+        config.ttd_config.n_initial_drafts = 1;
+        config.ttd_config.n_denoise_steps = 1;
+
+        let result = run_engine(&stub_panel(), &config, Arc::new(ThreeStageStubExecutor))
+            .await
+            .expect("run_engine must succeed");
+
+        assert!(
+            result.degradations.is_empty(),
+            "C3: a clean run must carry no degradations, got {:?}",
+            result.degradations
+        );
     }
 }
