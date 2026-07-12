@@ -228,6 +228,8 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
         merger_model: Some(cli.merger_model.clone()),
         scope,
         seed_papers: cli.seed_papers.clone(),
+        embedding_model: cli.embedding_model.clone(),
+        embedding_dim: cli.embedding_dim,
     };
 
     let result = run_review(question, &opts, ctx).await?;
@@ -314,6 +316,19 @@ fn exit_for(result: &ReviewResult) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The stored scope string must parse back through the CLI's own parser
+    /// (clap `ValueEnum`) to the same [`Scope`] — the resume path re-parses it.
+    #[test]
+    fn scope_str_roundtrips_through_clap_value_enum() {
+        for scope in [Scope::CorpusOnly, Scope::CorpusPlusWeb] {
+            let parsed: Scope =
+                <ScopeArg as ValueEnum>::from_str(espigue::pipeline::scope_str(scope), false)
+                    .expect("scope_str must be a valid clap value")
+                    .into();
+            assert_eq!(parsed, scope);
+        }
+    }
 
     fn result(synthesis_yaml: &str, degraded: bool) -> ReviewResult {
         ReviewResult {

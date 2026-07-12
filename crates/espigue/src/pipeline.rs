@@ -21,7 +21,10 @@ use orchestration::{
     },
     AgentExecutor,
 };
-use search::{BibliographyStore, FusedHit, SqliteBibliographyStore};
+use search::{
+    BibliographyStore, CheckpointStore, FusedHit, RunRecord, SqliteBibliographyStore,
+    SqliteCheckpointStore,
+};
 
 use crate::context::LitContext;
 
@@ -155,6 +158,11 @@ pub struct ReviewOptions {
     /// the initial fusion, and the topicality gate; Stage-1/2 gap-fill still
     /// runs and honours [`scope`](Self::scope).
     pub seed_papers: Vec<String>,
+    /// Embedding model slug (recorded in `synthesis_runs` so a resumed run can
+    /// refuse a mismatched embedding space).
+    pub embedding_model: String,
+    /// Embedding vector width (recorded alongside [`embedding_model`](Self::embedding_model)).
+    pub embedding_dim: usize,
 }
 
 impl Default for ReviewOptions {
@@ -166,6 +174,8 @@ impl Default for ReviewOptions {
             merger_model: Some(DEFAULT_MERGER_MODEL.to_string()),
             scope: Scope::CorpusPlusWeb,
             seed_papers: Vec::new(),
+            embedding_model: crate::openrouter::embeddings::DEFAULT_MODEL.to_string(),
+            embedding_dim: crate::openrouter::embeddings::DEFAULT_DIMENSIONS,
         }
     }
 }
@@ -203,6 +213,61 @@ pub fn parse_prompt_profile(raw: Option<&str>) -> Result<PromptProfile, String> 
                  v3/lit-review-long"
             )),
         },
+    }
+}
+
+/// Canonical string for a [`PromptProfile`] — exactly the strings
+/// [`parse_prompt_profile`] accepts, so a stored profile parses back.
+pub fn prompt_profile_str(profile: PromptProfile) -> &'static str {
+    match profile {
+        PromptProfile::V1Delphi => "v1/delphi",
+        PromptProfile::V2LitReview => "v2/lit-review",
+        PromptProfile::V3LitReviewLong => "v3/lit-review-long",
+    }
+}
+
+/// Canonical string for a [`Scope`] — the clap value names the CLI accepts
+/// ("corpus-only", "corpus+web"), so a stored scope parses back.
+pub fn scope_str(scope: Scope) -> &'static str {
+    match scope {
+        Scope::CorpusOnly => "corpus-only",
+        Scope::CorpusPlusWeb => "corpus+web",
+    }
+}
+
+/// Assemble the `synthesis_runs` row for a fresh run (pure — unit-testable).
+///
+/// `top_k` is the already-clamped effective value. `code_version` and `now`
+/// (RFC 3339 UTC, used for both timestamps) are injected so tests need no git
+/// or clock.
+fn build_run_record(
+    run_id: &str,
+    question: &str,
+    question_id: &str,
+    opts: &ReviewOptions,
+    top_k: usize,
+    panel_source_ids: &[String],
+    code_version: String,
+    now: String,
+) -> RunRecord {
+    RunRecord {
+        run_id: run_id.to_string(),
+        question: question.to_string(),
+        question_id: question_id.to_string(),
+        profile: prompt_profile_str(opts.profile).to_string(),
+        model: opts.model.clone(),
+        merger_model: opts.merger_model.clone(),
+        top_k: top_k as i64,
+        scope: scope_str(opts.scope).to_string(),
+        seed_papers: serde_json::to_string(&opts.seed_papers).unwrap_or_else(|_| "[]".into()),
+        embedding_model: opts.embedding_model.clone(),
+        embedding_dim: opts.embedding_dim as i64,
+        panel_source_ids: serde_json::to_string(panel_source_ids)
+            .unwrap_or_else(|_| "[]".into()),
+        code_version,
+        status: "running".to_string(),
+        started_at: now.clone(),
+        updated_at: now,
     }
 }
 
@@ -1325,6 +1390,7 @@ pub async fn run_review(
     }
 
     let run_id = uuid::Uuid::new_v4().to_string();
+    let question_id = uuid::Uuid::new_v4().to_string();
     let top_k = opts.top_k.clamp(1, TOP_K_HARD_CAP);
     let profile = opts.profile;
     let model = opts.model.as_str();
@@ -1530,6 +1596,31 @@ pub async fn run_review(
         });
     }
 
+    // B3: persist the run's identity + options in `synthesis_runs` so a killed
+    // run can be resumed. Failure is loud but never kills the run.
+    let checkpoint_store = Arc::new(SqliteCheckpointStore::new((*ctx.lit_pool).clone()));
+    let panel_source_ids: Vec<String> = panel
+        .iter()
+        .map(|e| e.expert_id.as_str().to_string())
+        .collect();
+    let record = build_run_record(
+        &run_id,
+        &trimmed,
+        &question_id,
+        opts,
+        top_k,
+        &panel_source_ids,
+        orchestration::ttd::artifact::code_version(),
+        chrono::Utc::now().to_rfc3339(),
+    );
+    if let Err(e) = checkpoint_store.record_run_start(&record).await {
+        tracing::warn!(
+            run_id = %run_id,
+            error = %e,
+            "synthesize: record_run_start failed — run continues without resume metadata"
+        );
+    }
+
     // Full-text coverage accounting (loud, F6).
     let mut n_fulltext = 0usize;
     for expert in &panel {
@@ -1617,7 +1708,6 @@ pub async fn run_review(
         Arc::new(SqliteBibliographyStore::new((*ctx.lit_pool).clone()));
 
     let run_prefix = &run_id[..run_id.len().min(8)];
-    let question_id = uuid::Uuid::new_v4().to_string();
     let config = EngineConfig::new(
         TTD_AGENT_ID,
         model,
@@ -1628,6 +1718,7 @@ pub async fn run_review(
     .with_run_id(run_id.clone())
     .with_question(&trimmed)
     .with_stage_retrievers(live_retriever, local_retriever)
+    .with_checkpoint_store(checkpoint_store.clone())
     .with_profile(profile)
     .with_panel_refresher(Arc::new(LitPanelRefresher {
         pool: (*ctx.lit_pool).clone(),
@@ -1688,8 +1779,18 @@ pub async fn run_review(
             (yaml, graph_markdown, narrative, false, String::new())
         }
         Err(e) => {
+            // B3: mark the run failed so it shows up as resumable. Loud but
+            // never fatal — the degraded result must still reach the caller.
+            if let Err(me) = checkpoint_store.mark_run_status(&run_id, "failed").await {
+                tracing::warn!(
+                    run_id = %run_id,
+                    error = %me,
+                    "synthesize: mark_run_status(failed) failed"
+                );
+            }
             let notice = format!(
-                "⚠ Synthesis degraded: engine run failed: {e}. Bibliography may be partial."
+                "⚠ Synthesis degraded: engine run failed: {e}. Bibliography may be partial. \
+                 Resume with: espigue resume {run_id}"
             );
             tracing::warn!(run_id = %run_id, error = %e, "synthesize: run_engine_with_bib failed");
             (String::new(), String::new(), String::new(), true, notice)
@@ -1769,6 +1870,21 @@ pub async fn run_review(
     })
 }
 
+/// Finalise a successful run: mark `synthesis_runs.status = "complete"` and
+/// delete its stage checkpoints.
+///
+/// Deliberately NOT called by [`run_review`]: the caller writes
+/// synthesis.yaml/graph.md AFTER the run returns, so the caller finalises only
+/// once those files are safely on disk. Finalising earlier would leave a crash
+/// between engine success and file write marked "complete" with its
+/// checkpoints deleted — unresumable and outputless.
+pub async fn finalize_run(ctx: &LitContext, run_id: &str) -> anyhow::Result<()> {
+    let store = SqliteCheckpointStore::new((*ctx.lit_pool).clone());
+    store.mark_run_status(run_id, "complete").await?;
+    store.delete_checkpoints(run_id).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1815,6 +1931,72 @@ mod tests {
             PromptProfile::V2LitReview
         );
         assert!(parse_prompt_profile(Some("bogus")).is_err());
+    }
+
+    #[test]
+    fn prompt_profile_str_roundtrips_through_parser() {
+        for profile in [
+            PromptProfile::V1Delphi,
+            PromptProfile::V2LitReview,
+            PromptProfile::V3LitReviewLong,
+        ] {
+            assert_eq!(
+                parse_prompt_profile(Some(prompt_profile_str(profile))).unwrap(),
+                profile,
+                "prompt_profile_str({profile:?}) must parse back"
+            );
+        }
+    }
+
+    #[test]
+    fn build_run_record_serialises_options_and_panel() {
+        let opts = ReviewOptions {
+            top_k: 999, // deliberately unclamped: build_run_record takes the effective value
+            profile: PromptProfile::V2LitReview,
+            model: "test/model".into(),
+            merger_model: Some("test/merger".into()),
+            scope: Scope::CorpusOnly,
+            seed_papers: vec!["2401.00001".into(), "10.1000/x".into()],
+            embedding_model: "test/embed".into(),
+            embedding_dim: 42,
+        };
+        let panel_ids = vec!["p1".to_string(), "p2".to_string()];
+        let rec = build_run_record(
+            "run-1",
+            "why?",
+            "q-1",
+            &opts,
+            50,
+            &panel_ids,
+            "abc1234".into(),
+            "2026-07-12T00:00:00+00:00".into(),
+        );
+        assert_eq!(rec.run_id, "run-1");
+        assert_eq!(rec.question, "why?");
+        assert_eq!(rec.question_id, "q-1");
+        assert_eq!(rec.profile, "v2/lit-review");
+        assert_eq!(rec.model, "test/model");
+        assert_eq!(rec.merger_model.as_deref(), Some("test/merger"));
+        assert_eq!(rec.top_k, 50, "record carries the clamped top_k, not opts.top_k");
+        assert_eq!(rec.scope, "corpus-only");
+        assert_eq!(rec.seed_papers, r#"["2401.00001","10.1000/x"]"#);
+        assert_eq!(rec.embedding_model, "test/embed");
+        assert_eq!(rec.embedding_dim, 42);
+        assert_eq!(rec.panel_source_ids, r#"["p1","p2"]"#);
+        assert_eq!(rec.code_version, "abc1234");
+        assert_eq!(rec.status, "running");
+        assert_eq!(rec.started_at, "2026-07-12T00:00:00+00:00");
+        assert_eq!(rec.updated_at, rec.started_at);
+
+        // Stored strings must parse back through the run_review entry parsers.
+        assert_eq!(
+            parse_prompt_profile(Some(&rec.profile)).unwrap(),
+            PromptProfile::V2LitReview
+        );
+        let seeds: Vec<String> = serde_json::from_str(&rec.seed_papers).unwrap();
+        assert_eq!(seeds, opts.seed_papers);
+        let ids: Vec<String> = serde_json::from_str(&rec.panel_source_ids).unwrap();
+        assert_eq!(ids, panel_ids);
     }
 
     #[test]
