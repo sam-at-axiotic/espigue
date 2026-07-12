@@ -36,7 +36,10 @@ use crate::ttd::config::TtdConfig;
 use crate::ttd::fitness::{is_valid_synthesis, is_valid_v2, FitnessEval};
 use crate::ttd::mod_types::TtdError;
 use crate::ttd::plan::ReviewPlan;
-use crate::ttd::stages::{DraftGen, EvalFitness, GapIdentify, GapResolve, Merger, RetrievedContext};
+use crate::ttd::stages::synthesis::parse_gaps_xml;
+use crate::ttd::stages::{
+    DraftGen, EvalFitness, GapIdentify, GapResolve, Merger, RetrievedContext,
+};
 use crate::ttd::state::IdentifiedGap;
 use crate::ttd::term_sheet::PromptProfile;
 use crate::ttd::weights::{NARRATIVE_WEIGHTS, V2_NARRATIVE_WEIGHTS, V3_PLANNED_NARRATIVE_WEIGHTS};
@@ -919,83 +922,8 @@ impl EvalFitness<String> for NarrativeEvalFitness {
 
 // ── Parse helpers ─────────────────────────────────────────────────────────────
 
-/// Parse `<gaps>` XML output from narrative_critique into `IdentifiedGap` list.
-///
-/// T1 ruled contract (shared with synthesis.rs / graph.rs): missing or empty
-/// `<gaps>` block → `Ok(vec![])` (never `Err`, never a bare `Vec`). A gap is
-/// valid iff it has a non-empty `<description>`; `<query>` defaults to the
-/// description when absent. Uses the canonical quick_xml event parser so the
-/// three stages share one parse behaviour.
-fn parse_gaps_xml(xml: &str) -> Result<Vec<IdentifiedGap>, TtdError> {
-    let xml_block = match extract_xml_block(xml, "gaps") {
-        Some(block) => block,
-        None => return Ok(Vec::new()),
-    };
-
-    use quick_xml::events::Event;
-    use quick_xml::Reader;
-
-    let mut reader = Reader::from_str(&xml_block);
-    reader.trim_text(true);
-
-    let mut gaps = Vec::new();
-    let mut buf = Vec::new();
-    let mut in_description = false;
-    let mut in_query = false;
-    let mut description = String::new();
-    let mut query = String::new();
-
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => {
-                let tag = std::str::from_utf8(e.name().as_ref()).unwrap_or("").to_string();
-                match tag.as_str() {
-                    "gap" => {
-                        description.clear();
-                        query.clear();
-                    }
-                    "description" => { in_description = true; }
-                    "query" => { in_query = true; }
-                    _ => {}
-                }
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.unescape().unwrap_or_default().to_string();
-                if in_description {
-                    description.push_str(&text);
-                } else if in_query {
-                    query.push_str(&text);
-                }
-            }
-            Ok(Event::End(e)) => {
-                let tag = std::str::from_utf8(e.name().as_ref()).unwrap_or("").to_string();
-                match tag.as_str() {
-                    "description" => { in_description = false; }
-                    "query" => { in_query = false; }
-                    "gap" => {
-                        if !description.is_empty() {
-                            gaps.push(IdentifiedGap {
-                                description: description.trim().to_string(),
-                                query: if query.is_empty() {
-                                    description.trim().to_string()
-                                } else {
-                                    query.trim().to_string()
-                                },
-                            });
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(gaps)
-}
+// `parse_gaps_xml` (T1 ruled contract) lives in synthesis.rs — one canonical
+// copy shared by all three stages; imported at the top of this file.
 
 /// Parse a fitness score (1–5) from a fitness-judge LLM response.
 ///
@@ -1007,20 +935,6 @@ fn parse_gaps_xml(xml: &str) -> Result<Vec<IdentifiedGap>, TtdError> {
 /// source of truth across all three stages.
 fn parse_fitness_score(output: &str) -> Option<u8> {
     crate::ttd::fitness::parse_fitness_response(output).score
-}
-
-/// Extract the whole `<{tag}...>...</{tag}>` block from the given string.
-///
-/// T1 ruled contract (shared with synthesis.rs / graph.rs): returns the WHOLE
-/// tagged block (open + body + close) using prefix-open (`<{tag}` — matches
-/// `<tag>` and attributed `<tag attr=..>`) / first-close matching. Returns
-/// `None` if the open or its first close is absent.
-fn extract_xml_block(text: &str, tag: &str) -> Option<String> {
-    let open = format!("<{tag}");
-    let close = format!("</{tag}>");
-    let start = text.find(&open)?;
-    let end = text[start..].find(&close).map(|i| start + i + close.len())?;
-    Some(text[start..end].to_string())
 }
 
 /// Last non-empty paragraph of a text block (split on blank lines).
@@ -2084,7 +1998,7 @@ mod tests {
 
     // ╔═══════════════════════════════════════════════════════════════════════╗
     // ║ SEAM F4c — NARRATIVE parser (characterisation net, W-522022c5)          ║
-    // ║ Reaches the private file-level `parse_gaps_xml` via super::super.        ║
+    // ║ Reaches the shared parser (synthesis.rs) via this file's re-import.      ║
     // ║ PINS THE T1 RULED CONTRACT: desc-only→Ok(1) (query defaults to desc);    ║
     // ║ missing block→Ok(vec![]); panic-freedom on adversarial multibyte input.  ║
     // ║ (Narrative already matched the missing→Ok([]) contract; the prior        ║

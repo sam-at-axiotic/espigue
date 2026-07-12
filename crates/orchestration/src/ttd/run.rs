@@ -63,14 +63,15 @@ fn log_dimension_scores(stage: &str, trajectory: usize, step: usize, phase: &str
     }
 }
 
-impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
+impl<A: Clone + Send + Sync + serde::Serialize + 'static> TtdMachine<A> {
     /// Run the full TTD loop for this stage.
     ///
     /// ## Contract
     ///
     /// - Spawns exactly `config.n_initial_drafts` drafts concurrently.
-    /// - Runs exactly `config.n_denoise_steps` iterations per trajectory (fixed cap,
-    ///   `early_stopping=false` — CONTEXT locked decision).
+    /// - Runs exactly `config.n_denoise_steps` iterations per trajectory (fixed cap;
+    ///   consensus's `early_stopping` knob is deliberately not ported — CONTEXT
+    ///   locked decision; `plateau_threshold` is the only live early-stop).
     /// - After the loop, runs a FRESH final fitness re-evaluation for every trajectory
     ///   before calling `sort_candidates_best_first` (Pitfall 4).
     /// - If retrieved is empty for all gaps, draft is returned UNCHANGED (runner.py guard).
@@ -182,7 +183,9 @@ impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
         );
 
         // ── Step 2: Per-trajectory denoise Loop(S) ────────────────────────────
-        // Fixed cap — early_stopping is always false (CONTEXT locked decision).
+        // Fixed cap — consensus's early_stopping knob is deliberately not
+        // ported (CONTEXT locked decision); plateau_threshold below is the
+        // only live early-stop.
         // A5 rung 4: trajectories evolve concurrently via join_all over
         // states.iter_mut() (closes the 23-02 deferral). No Arc<Box<dyn>>
         // refactor — the 23-02 blocker applied only to JoinSet 'static spawning;
@@ -314,6 +317,15 @@ impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
         let sorted = sort_candidates_best_first(&final_drafts, &final_evals, weights, is_valid);
 
         // ── Step 5: Merge ─────────────────────────────────────────────────────
+        // Merge-input observability: run logs are session-local, so once a run
+        // ends there is no record of what the merger chose FROM — only what it
+        // kept. TTD_MERGE_DUMP_DIR persists each sorted candidate to disk
+        // (best-first file order). Unset ⇒ zero behaviour change.
+        if let Ok(dir) = std::env::var("TTD_MERGE_DUMP_DIR") {
+            if !dir.trim().is_empty() {
+                self.dump_merge_inputs(dir.trim(), &sorted);
+            }
+        }
         let merge_start = Instant::now();
         let merged = self.merger.merge(&sorted, &self.executor, &self.config).await?;
         tracing::info!(
@@ -331,6 +343,58 @@ impl<A: Clone + Send + Sync + 'static> TtdMachine<A> {
         );
 
         Ok(merged)
+    }
+
+    /// Persist the sorted merger-entry candidates to `dir` as YAML, one file per
+    /// candidate, best-first: `<run8>-<stage>-merge-input-<i>.yaml` (i=0 is the
+    /// top-ranked candidate). Observability only — every failure is a warning,
+    /// never an error: a dump must not kill a 40-minute run.
+    fn dump_merge_inputs(&self, dir: &str, sorted: &[A]) {
+        let base = std::path::Path::new(dir);
+        if let Err(e) = std::fs::create_dir_all(base) {
+            tracing::warn!(
+                dir = %dir,
+                error = %e,
+                "merge-input dump: create_dir_all failed — skipping dump"
+            );
+            return;
+        }
+        let run8: String = self.run_id.chars().take(8).collect();
+        let mut written = 0usize;
+        for (i, candidate) in sorted.iter().enumerate() {
+            let yaml = match serde_yaml::to_string(candidate) {
+                Ok(y) => y,
+                Err(e) => {
+                    tracing::warn!(
+                        stage = %self.stage_label,
+                        candidate = i,
+                        error = %e,
+                        "merge-input dump: YAML serialisation failed — skipping candidate"
+                    );
+                    continue;
+                }
+            };
+            let path = base.join(format!(
+                "{run8}-{stage}-merge-input-{i}.yaml",
+                stage = self.stage_label
+            ));
+            match std::fs::write(&path, yaml) {
+                Ok(()) => written += 1,
+                Err(e) => tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "merge-input dump: write failed — skipping candidate"
+                ),
+            }
+        }
+        tracing::info!(
+            target: "ttd_perf",
+            stage = %self.stage_label,
+            dir = %dir,
+            n_candidates = sorted.len(),
+            written,
+            "ttd_perf: merge-input dump"
+        );
     }
 
     /// Per-trajectory denoise loop body — extracted for join_all concurrency (A5 rung 4).

@@ -9,6 +9,7 @@
 pub mod embeddings;
 pub mod executor;
 pub mod rerank;
+mod retry;
 
 /// Default OpenRouter API base. Tests point the clients at a `wiremock` server.
 pub const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";

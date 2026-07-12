@@ -159,6 +159,15 @@ fn cache_key_references(resolved_id: &str) -> String {
     format!("{resolved_id}_references")
 }
 
+/// Record the outcome of an S2 cache write. A failed write is non-fatal (the
+/// lane just re-fetches next time) but must be loud: a silently broken cache
+/// re-spends the rate-limited S2 budget on every run.
+fn warn_if_cache_write_failed<T, E: std::fmt::Display>(key: &str, result: Result<T, E>) {
+    if let Err(e) = result {
+        tracing::warn!(key, error = %e, "s2 cache write failed; lane will re-fetch");
+    }
+}
+
 /// Cache+gateway+backoff wrapper for `search_papers`.
 async fn cached_search_papers(
     query: &str,
@@ -193,7 +202,10 @@ async fn cached_search_papers(
                 let resolved = resolve_paper_id(&p.s2_id);
                 let key = cache_key_paper(&resolved);
                 if let Ok(payload) = serde_json::to_string(p) {
-                    let _ = s2_cache_put_if_absent(lit_pool, &key, &payload).await;
+                    warn_if_cache_write_failed(
+                        &key,
+                        s2_cache_put_if_absent(lit_pool, &key, &payload).await,
+                    );
                 }
             }
             papers
@@ -248,14 +260,17 @@ async fn cached_get_citations(
     match result {
         Ok(papers) => {
             if let Ok(payload) = serde_json::to_string(&papers) {
-                let _ = s2_cache_put(lit_pool, &key, &payload).await;
+                warn_if_cache_write_failed(&key, s2_cache_put(lit_pool, &key, &payload).await);
             }
             // Cache each embedded paper individually (put_if_absent — clawd :263-268).
             for p in &papers {
                 let resolved_p = resolve_paper_id(&p.s2_id);
                 let paper_key = cache_key_paper(&resolved_p);
                 if let Ok(p_payload) = serde_json::to_string(p) {
-                    let _ = s2_cache_put_if_absent(lit_pool, &paper_key, &p_payload).await;
+                    warn_if_cache_write_failed(
+                        &paper_key,
+                        s2_cache_put_if_absent(lit_pool, &paper_key, &p_payload).await,
+                    );
                 }
             }
             papers
@@ -310,14 +325,17 @@ async fn cached_get_references(
     match result {
         Ok(papers) => {
             if let Ok(payload) = serde_json::to_string(&papers) {
-                let _ = s2_cache_put(lit_pool, &key, &payload).await;
+                warn_if_cache_write_failed(&key, s2_cache_put(lit_pool, &key, &payload).await);
             }
             // Cache each embedded paper individually (clawd :300-305).
             for p in &papers {
                 let resolved_p = resolve_paper_id(&p.s2_id);
                 let paper_key = cache_key_paper(&resolved_p);
                 if let Ok(p_payload) = serde_json::to_string(p) {
-                    let _ = s2_cache_put_if_absent(lit_pool, &paper_key, &p_payload).await;
+                    warn_if_cache_write_failed(
+                        &paper_key,
+                        s2_cache_put_if_absent(lit_pool, &paper_key, &p_payload).await,
+                    );
                 }
             }
             papers
@@ -401,11 +419,17 @@ async fn cached_get_papers_batch(
                     let resolved = resolve_paper_id(&uncached_ids[j]);
                     let key = cache_key_paper(&resolved);
                     if let Ok(payload) = serde_json::to_string(paper) {
-                        let _ = s2_cache_put(lit_pool, &key, &payload).await;
+                        warn_if_cache_write_failed(
+                            &key,
+                            s2_cache_put(lit_pool, &key, &payload).await,
+                        );
                         // Also cache by s2_id directly.
                         let s2_key = cache_key_paper(&paper.s2_id);
                         if s2_key != key {
-                            let _ = s2_cache_put_if_absent(lit_pool, &s2_key, &payload).await;
+                            warn_if_cache_write_failed(
+                                &s2_key,
+                                s2_cache_put_if_absent(lit_pool, &s2_key, &payload).await,
+                            );
                         }
                     }
                 }

@@ -36,8 +36,6 @@ pub struct TtdConfig {
     pub fitness_threshold: u8,
     /// Phase 23: false — temperature diversity deferred to Phase 24 (randomize_sampling=True in consensus).
     pub randomize_sampling: bool,
-    /// Fixed-cap loop; NOT a score-plateau gate (early_stopping=False).
-    pub early_stopping: bool,
     /// Stage 2 uses graph template when `ArgumentationGraph` is present (use_graph_draft=True).
     pub use_graph_draft: bool,
     /// Patch → full-regen → heuristic gap-resolve chain (incremental_resolve=True).
@@ -54,10 +52,6 @@ pub struct TtdConfig {
     pub temp_range: (f32, f32),
     /// top_p range for per-trajectory sampling (top_p_range=(0.8,1.0) runner.py:75).
     pub top_p_range: (f32, f32),
-    // --- Phase 24 EXT-02 addition ---
-    /// Consensus early-stopping delta threshold (early_stopping_threshold=0.01 runner.py:83).
-    /// Only active when early_stopping=true. Missing from Phase 23 (moot since off by default).
-    pub early_stopping_threshold: f32,
     /// Clawd-style plateau threshold — OFF by default (None).
     /// Score ≥ threshold OR Δ < 0.15 fires early stop (Phase 25 validates separately).
     pub plateau_threshold: Option<f32>,
@@ -125,7 +119,6 @@ impl Default for TtdConfig {
             use_fitness_feedback: true,
             fitness_threshold: 3,
             randomize_sampling: false, // Phase 23 deliberate gap — Phase 24 adds temperature diversity
-            early_stopping: false,
             use_graph_draft: true,
             incremental_resolve: true,
             max_stage_seconds: 1800,
@@ -134,7 +127,6 @@ impl Default for TtdConfig {
             seed: Some(42),
             temp_range: (0.5, 1.2),         // runner.py:75 — NOT config.py SamplingConfig.random() default
             top_p_range: (0.8, 1.0),
-            early_stopping_threshold: 0.01, // consensus default runner.py:83
             plateau_threshold: None,        // off by default — Phase 25 validates
             max_concurrent_fitness_evals: 5, // proven fan-out width from probe-10
             plan_mode: crate::ttd::plan::PlanMode::Disabled, // Phase 1 opt-in only
@@ -203,11 +195,6 @@ mod tests {
         assert_eq!(cfg.fitness_threshold, 3);
         assert_eq!(cfg.max_stage_seconds, 1800);
         assert_eq!(cfg.max_llm_calls, 1000);
-    }
-
-    #[test]
-    fn early_stopping_off_by_default() {
-        assert!(!TtdConfig::default().early_stopping);
     }
 
     #[test]

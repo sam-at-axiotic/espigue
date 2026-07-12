@@ -232,10 +232,12 @@ Output ONLY the XML block below. No preamble, no commentary, no markdown code fe
 ```
 
 CRITICAL CONSTRAINTS:
-- Every claim MUST have at least one `<source id="..."/>` and preserve its `<node_refs>`.
-- Each `<quote>` MUST be copied character-for-character from the quote evidence of a \
-node that claim cites, and MUST carry both `source` (the paper id) and `node` (the \
-node id). Do NOT invent quotes; if no cited node has a usable passage, omit the quote.
+- Every claim MUST have at least one `<source id="..."/>` and preserve its `<node_refs>` \
+(a claim whose quotes all come from `retrieved (no graph node)` sources omits `<node_refs>`).
+- Each `<quote>` MUST be copied character-for-character from the '## Quote evidence' \
+section. A quote from a graph node carries both `source` (the paper id) and `node` (the \
+node id); a quote from a source marked `retrieved (no graph node)` carries `source` only. \
+Do NOT invent quotes or node ids; if no evidence passage supports the claim, omit the quote.
 - support_level MUST be exactly one of: established, converging, contested, emerging, single-source.
 - evidence_grade MUST be exactly one of: strong, moderate, weak, anecdotal.
 - gap type MUST be exactly one of: epistemic, empirical, methodological, theoretical.
@@ -956,8 +958,8 @@ pub fn render_synthesis_merger_v2_split(
     let system = format!(
         r#"You are merging synthesis candidates into one authoritative literature review. \
 The user message carries the research question, the candidates, and a '## Quote evidence' \
-section — the graph's DB-verified quotes, grouped by source paper, each tagged with its node id.
-
+section — the graph's DB-verified quotes grouped by source paper and tagged with node ids, \
+plus quotes from retrieved sources marked `retrieved (no graph node)`.
 ## Quote authoring rules
 
 For every claim you author, look up the claim's cited source(s) in the '## Quote evidence' \
@@ -969,6 +971,13 @@ character-for-character — quotes are checked mechanically. Set the claim's \
 from anywhere else. If no node under the claim's sources has a passage that \
 genuinely supports it, omit the quote (it is attached deterministically \
 afterwards) — never fabricate one.
+
+Evidence sources marked `retrieved (no graph node)` are first-class: do NOT drop \
+or down-rank a claim because its source is retrieved rather than graph-anchored. \
+Copy a retrieved quote verbatim with `source=` only — \
+`<quote source="PAPER_ID">copied text</quote>`, no `node` attribute — and omit \
+`<node_refs>` when all of a claim's quotes are retrieved. Never invent a node id \
+for a retrieved quote.
 
 {depth}
 
@@ -986,7 +995,8 @@ afterwards) — never fabricate one.
 - When candidates disagree on support_level for the same claim, choose the level \
   best supported by the evidence_grade of the sourcing papers — not by candidate rank.
 - Preserve all lineage, method, year, and evidence_grade fields from the best-evidenced candidate.
-- Set each claim's `<node_refs>` to the graph node id(s) you quoted from the '## Quote evidence' section.
+- Set each claim's `<node_refs>` to the graph node id(s) you quoted from the '## Quote evidence' \
+  section; a claim quoting only `retrieved (no graph node)` sources omits `<node_refs>`.
 - Do not manufacture new claims not present in any candidate.
 - Source ID rule: the "Candidate N" section headings are presentation labels for working
   drafts. They are never valid source ids. Every `<source id>` in your output MUST be a
@@ -1009,7 +1019,7 @@ afterwards) — never fabricate one.
 
 {candidates}
 
-## Quote evidence (verified verbatim passages from the argumentation graph)
+## Quote evidence (verbatim passages: graph nodes, plus sources marked retrieved)
 
 {node_evidence}
 
