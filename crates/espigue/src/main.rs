@@ -25,6 +25,7 @@ use espigue::pipeline::{
     finalize_run, parse_prompt_profile, resume_review, run_review, ReviewOptions, ReviewResult,
     Scope, DEFAULT_MERGER_MODEL, DEFAULT_TOP_K,
 };
+use search::{CheckpointStore as _, RunRecord, SqliteCheckpointStore};
 
 /// Standalone literature-review synthesis over OpenRouter + arXiv (+ optional S2).
 #[derive(Parser, Debug)]
@@ -107,6 +108,8 @@ enum Command {
         /// The run_id printed by the failed run (also in `synthesis_runs`).
         run_id: String,
     },
+    /// List resumable runs (status not 'complete'), most recent first.
+    Runs,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -157,6 +160,12 @@ async fn main() -> ExitCode {
 async fn run() -> anyhow::Result<u8> {
     let cli = Cli::parse();
 
+    // `runs` is a pure listing command: no API key, no LitContext — just a
+    // minimal read-only pool on the DB (same pattern as the resume pre-read).
+    if let Some(Command::Runs) = &cli.command {
+        return run_runs_cmd(&cli.db).await;
+    }
+
     let api_key = std::env::var("OPENROUTER_API_KEY").map_err(|_| {
         anyhow::anyhow!("OPENROUTER_API_KEY is not set — required for embeddings (and generation)")
     })?;
@@ -202,7 +211,118 @@ async fn run() -> anyhow::Result<u8> {
             Ok(EXIT_CLEAN)
         }
         Some(Command::Resume { run_id }) => run_resume_cmd(run_id, &cli, &ctx).await,
+        Some(Command::Runs) => unreachable!("`runs` returns before the context opens"),
         None => run_review_cmd(&cli, &ctx).await,
+    }
+}
+
+/// `espigue runs` — list resumable runs so users can find a run_id to resume.
+///
+/// Absence of runs is not an error for a listing command: a missing DB file,
+/// a pre-checkpointing DB (no `synthesis_runs` table), and an empty list all
+/// print the same friendly one-liner and exit 0.
+async fn run_runs_cmd(db: &Path) -> anyhow::Result<u8> {
+    let runs = load_resumable_runs(db).await?;
+    if runs.is_empty() {
+        println!("no resumable runs");
+    } else {
+        print!("{}", format_runs_table(&runs));
+    }
+    Ok(EXIT_CLEAN)
+}
+
+/// Load resumable runs via a minimal read-only pool (no vec extension, no
+/// migration). A missing DB file or missing `synthesis_runs` table means
+/// nothing was ever recorded — an empty list, not an error.
+async fn load_resumable_runs(db: &Path) -> anyhow::Result<Vec<RunRecord>> {
+    if !db.exists() {
+        return Ok(Vec::new());
+    }
+    let opts = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(db)
+        .create_if_missing(false)
+        .read_only(true);
+    let pool = sqlx::SqlitePool::connect_with(opts)
+        .await
+        .with_context(|| format!("opening {} read-only", db.display()))?;
+
+    let table: Option<(String,)> = sqlx::query_as(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'synthesis_runs'",
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if table.is_none() {
+        pool.close().await;
+        return Ok(Vec::new());
+    }
+
+    let runs = SqliteCheckpointStore::new(pool.clone())
+        .list_resumable_runs()
+        .await;
+    pool.close().await;
+    Ok(runs?)
+}
+
+/// Render resumable runs as a plain aligned table: run_id, status,
+/// started_at, profile, then a ~60-char question preview.
+fn format_runs_table(runs: &[RunRecord]) -> String {
+    const HEADERS: [&str; 5] = ["RUN_ID", "STATUS", "STARTED_AT", "PROFILE", "QUESTION"];
+
+    let rows: Vec<[String; 5]> = runs
+        .iter()
+        .map(|r| {
+            [
+                r.run_id.clone(),
+                r.status.clone(),
+                r.started_at.clone(),
+                r.profile.clone(),
+                question_preview(&r.question),
+            ]
+        })
+        .collect();
+
+    // Pad the first four columns to their widest cell (or header); the last
+    // column is never padded, so lines carry no trailing spaces.
+    let mut widths = [0usize; 4];
+    for (i, w) in widths.iter_mut().enumerate() {
+        *w = rows
+            .iter()
+            .map(|r| r[i].chars().count())
+            .chain([HEADERS[i].len()])
+            .max()
+            .unwrap_or(0);
+    }
+
+    let line = |cells: [&str; 5]| -> String {
+        let mut s = String::new();
+        for (i, w) in widths.iter().enumerate() {
+            s.push_str(cells[i]);
+            let pad = w.saturating_sub(cells[i].chars().count());
+            s.extend(std::iter::repeat(' ').take(pad + 2));
+        }
+        s.push_str(cells[4]);
+        s.truncate(s.trim_end().len());
+        s.push('\n');
+        s
+    };
+
+    let mut out = line(HEADERS);
+    for row in &rows {
+        out.push_str(&line([&row[0], &row[1], &row[2], &row[3], &row[4]]));
+    }
+    out
+}
+
+/// First ~60 chars of the question, whitespace collapsed, '…' when truncated.
+fn question_preview(question: &str) -> String {
+    const MAX_CHARS: usize = 60;
+    let flat = question.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.chars().count() <= MAX_CHARS {
+        flat
+    } else {
+        let mut preview: String = flat.chars().take(MAX_CHARS - 1).collect();
+        preview.push('…');
+        preview
     }
 }
 
@@ -453,6 +573,13 @@ mod tests {
     }
 
     #[test]
+    fn cli_parses_runs_subcommand() {
+        let cli = Cli::try_parse_from(["espigue", "runs"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Runs)));
+        assert!(cli.question.is_none());
+    }
+
+    #[test]
     fn cli_still_parses_bare_question() {
         let cli = Cli::try_parse_from(["espigue", "test-time compute scaling"]).unwrap();
         assert!(cli.command.is_none());
@@ -524,6 +651,114 @@ mod tests {
             "claims: []"
         );
         assert_eq!(std::fs::read_to_string(&graph_path).unwrap(), "# graph");
+    }
+
+    fn run_record(run_id: &str, status: &str, updated_at: &str) -> RunRecord {
+        RunRecord {
+            run_id: run_id.into(),
+            question: "Does test-time compute scaling improve reasoning?".into(),
+            question_id: "q-1".into(),
+            profile: "v3/lit-review-long".into(),
+            model: "test-model".into(),
+            merger_model: None,
+            top_k: 40,
+            scope: "corpus+web".into(),
+            seed_papers: "[]".into(),
+            embedding_model: "test-embed".into(),
+            embedding_dim: 4,
+            panel_source_ids: "[]".into(),
+            code_version: "test".into(),
+            status: status.into(),
+            started_at: "2026-07-12T00:00:00+00:00".into(),
+            updated_at: updated_at.into(),
+        }
+    }
+
+    #[test]
+    fn question_preview_passes_short_and_truncates_long() {
+        assert_eq!(question_preview("short question"), "short question");
+        // Newlines and runs of spaces collapse to single spaces.
+        assert_eq!(question_preview("a\n b   c"), "a b c");
+
+        let long = "x".repeat(80);
+        let preview = question_preview(&long);
+        assert_eq!(preview.chars().count(), 60);
+        assert!(preview.ends_with('…'));
+    }
+
+    #[test]
+    fn format_runs_table_aligns_columns() {
+        let runs = vec![
+            run_record("run-with-a-long-id", "running", "2026-07-12T02:00:00+00:00"),
+            run_record("r2", "failed", "2026-07-12T01:00:00+00:00"),
+        ];
+        let table = format_runs_table(&runs);
+        let lines: Vec<&str> = table.lines().collect();
+        assert_eq!(lines.len(), 3, "header + one line per run");
+        assert!(lines[0].starts_with("RUN_ID"));
+
+        // Every line's STATUS column starts at the same offset.
+        let col = lines[1].find("running").unwrap();
+        assert_eq!(lines[0].find("STATUS").unwrap(), col);
+        assert_eq!(lines[2].find("failed").unwrap(), col);
+    }
+
+    /// Missing DB file and a DB without `synthesis_runs` both list as empty —
+    /// `espigue runs` treats absence as "no resumable runs", not an error.
+    #[tokio::test]
+    async fn load_resumable_runs_absent_db_or_table_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let missing = dir.path().join("missing.db");
+        assert!(load_resumable_runs(&missing).await.unwrap().is_empty());
+        assert_eq!(run_runs_cmd(&missing).await.unwrap(), EXIT_CLEAN);
+
+        // A real SQLite file with no synthesis_runs table (pre-checkpoint DB).
+        let bare = dir.path().join("bare.db");
+        let opts = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&bare)
+            .create_if_missing(true);
+        let pool = sqlx::SqlitePool::connect_with(opts).await.unwrap();
+        sqlx::query("CREATE TABLE unrelated (x INTEGER)")
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        assert!(load_resumable_runs(&bare).await.unwrap().is_empty());
+        assert_eq!(run_runs_cmd(&bare).await.unwrap(), EXIT_CLEAN);
+    }
+
+    /// Against a migrated temp DB: complete runs are excluded and the rest
+    /// come back most recently updated first.
+    #[tokio::test]
+    async fn load_resumable_runs_excludes_complete() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("runs.db");
+        let opts = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&db)
+            .create_if_missing(true);
+        let pool = sqlx::SqlitePool::connect_with(opts).await.unwrap();
+        search::lit_schema::migrate(&pool, 4).await.unwrap();
+
+        let store = SqliteCheckpointStore::new(pool.clone());
+        store
+            .record_run_start(&run_record("run-done", "complete", "2026-07-12T03:00:00+00:00"))
+            .await
+            .unwrap();
+        store
+            .record_run_start(&run_record("run-failed", "failed", "2026-07-12T01:00:00+00:00"))
+            .await
+            .unwrap();
+        store
+            .record_run_start(&run_record("run-live", "running", "2026-07-12T02:00:00+00:00"))
+            .await
+            .unwrap();
+        pool.close().await;
+
+        let runs = load_resumable_runs(&db).await.unwrap();
+        let ids: Vec<&str> = runs.iter().map(|r| r.run_id.as_str()).collect();
+        assert_eq!(ids, ["run-live", "run-failed"]);
+        assert_eq!(run_runs_cmd(&db).await.unwrap(), EXIT_CLEAN);
     }
 
     #[test]
