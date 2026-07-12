@@ -22,8 +22,8 @@ use espigue::ingest::ingest_dir;
 use espigue::openrouter::embeddings::{DEFAULT_DIMENSIONS, DEFAULT_MODEL};
 use espigue::openrouter::rerank::DEFAULT_RERANK_MODEL;
 use espigue::pipeline::{
-    parse_prompt_profile, run_review, ReviewOptions, ReviewResult, Scope, DEFAULT_MERGER_MODEL,
-    DEFAULT_TOP_K,
+    finalize_run, parse_prompt_profile, resume_review, run_review, ReviewOptions, ReviewResult,
+    Scope, DEFAULT_MERGER_MODEL, DEFAULT_TOP_K,
 };
 
 /// Standalone literature-review synthesis over OpenRouter + arXiv (+ optional S2).
@@ -91,7 +91,7 @@ struct Cli {
     seed_papers: Vec<String>,
 
     /// Output directory for synthesis.yaml + graph.md.
-    #[arg(long, default_value = ".")]
+    #[arg(long, default_value = ".", global = true)]
     out: PathBuf,
 }
 
@@ -101,6 +101,11 @@ enum Command {
     Ingest {
         /// Directory to walk (recursively).
         dir: PathBuf,
+    },
+    /// Resume a failed review run from its stage checkpoints.
+    Resume {
+        /// The run_id printed by the failed run (also in `synthesis_runs`).
+        run_id: String,
     },
 }
 
@@ -156,10 +161,32 @@ async fn run() -> anyhow::Result<u8> {
         anyhow::anyhow!("OPENROUTER_API_KEY is not set — required for embeddings (and generation)")
     })?;
 
-    // Both paths open the same context (DB + embedder + clients).
+    // Resume must use the embedding settings the run was RECORDED with:
+    // `LitContext::open` migrates the vec store with `embedding_dim`, so
+    // opening with the wrong dim corrupts vec-store expectations. Pre-read
+    // them from `synthesis_runs` before building the context.
+    let (embedding_model, embedding_dim) = match &cli.command {
+        Some(Command::Resume { run_id }) => {
+            let (stored_model, stored_dim) = read_stored_embedding(&cli.db, run_id).await?;
+            if stored_model != cli.embedding_model || stored_dim != cli.embedding_dim {
+                tracing::warn!(
+                    stored_model = %stored_model,
+                    stored_dim = stored_dim,
+                    cli_model = %cli.embedding_model,
+                    cli_dim = cli.embedding_dim,
+                    "resume: CLI embedding settings differ from the run's recorded \
+                     settings — using the stored values"
+                );
+            }
+            (stored_model, stored_dim)
+        }
+        _ => (cli.embedding_model.clone(), cli.embedding_dim),
+    };
+
+    // All paths open the same context (DB + embedder + clients).
     let mut cfg = ContextConfig::new(&cli.db, api_key);
-    cfg.embedding_model = cli.embedding_model.clone();
-    cfg.embedding_dim = cli.embedding_dim;
+    cfg.embedding_model = embedding_model;
+    cfg.embedding_dim = embedding_dim;
     cfg.rerank_model = if cli.no_rerank {
         None
     } else {
@@ -174,8 +201,58 @@ async fn run() -> anyhow::Result<u8> {
             run_ingest(dir, &ctx).await?;
             Ok(EXIT_CLEAN)
         }
+        Some(Command::Resume { run_id }) => run_resume_cmd(run_id, &cli, &ctx).await,
         None => run_review_cmd(&cli, &ctx).await,
     }
+}
+
+/// Pre-read a run's recorded embedding model + dim from `synthesis_runs`,
+/// via a minimal read-only pool (no vec extension, no migration).
+///
+/// Bails with a targeted message for each failure mode: missing DB file,
+/// pre-checkpointing DB (no `synthesis_runs` table), or unknown run_id.
+async fn read_stored_embedding(db: &Path, run_id: &str) -> anyhow::Result<(String, usize)> {
+    if !db.exists() {
+        anyhow::bail!(
+            "database {} does not exist — nothing to resume (resume needs the DB \
+             the failed run wrote its checkpoints to; pass it with --db)",
+            db.display()
+        );
+    }
+    let opts = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(db)
+        .create_if_missing(false)
+        .read_only(true);
+    let pool = sqlx::SqlitePool::connect_with(opts)
+        .await
+        .with_context(|| format!("opening {} read-only", db.display()))?;
+
+    let table: Option<(String,)> = sqlx::query_as(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'synthesis_runs'",
+    )
+    .fetch_optional(&pool)
+    .await?;
+    if table.is_none() {
+        pool.close().await;
+        anyhow::bail!(
+            "no resumable runs recorded in this database ({}) — it has no \
+             synthesis_runs table (created by runs of this espigue version)",
+            db.display()
+        );
+    }
+
+    let row: Option<(String, i64)> =
+        sqlx::query_as("SELECT embedding_model, embedding_dim FROM synthesis_runs WHERE run_id = ?")
+            .bind(run_id)
+            .fetch_optional(&pool)
+            .await?;
+    pool.close().await;
+    let (model, dim) = row.ok_or_else(|| {
+        anyhow::anyhow!("unknown run_id '{run_id}' — nothing to resume in {}", db.display())
+    })?;
+    let dim = usize::try_from(dim)
+        .map_err(|_| anyhow::anyhow!("run '{run_id}' records an invalid embedding_dim ({dim})"))?;
+    Ok((model, dim))
 }
 
 async fn run_ingest(dir: &std::path::Path, ctx: &LitContext) -> anyhow::Result<()> {
@@ -233,13 +310,25 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
     };
 
     let result = run_review(question, &opts, ctx).await?;
+    finish_review(cli, ctx, &result).await
+}
 
+async fn run_resume_cmd(run_id: &str, cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
+    let result = resume_review(run_id, ctx).await?;
+    finish_review(cli, ctx, &result).await
+}
+
+/// Shared output tail for fresh and resumed reviews: print the summary,
+/// write the outputs (empty synthesis bails — resumable, nothing finalised),
+/// then finalise the run only once the files are safely on disk.
+async fn finish_review(cli: &Cli, ctx: &LitContext, result: &ReviewResult) -> anyhow::Result<u8> {
     println!("run_id:       {}", result.run_id);
     println!("bibliography: {} sources", result.bib_count);
 
     if result.synthesis_yaml.is_empty() {
         // Degraded to the point of no output: do NOT clobber a previous good
         // synthesis.yaml/graph.md pair, and fail loudly (exit 1 via main).
+        // No finalize here — the run stays resumable via `espigue resume`.
         if !result.notice.is_empty() {
             println!("\n{}", result.notice);
         }
@@ -251,7 +340,7 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
         anyhow::bail!("review produced no synthesis — no output files written ({reason})");
     }
 
-    let (yaml_path, graph_path) = write_outputs(&cli.out, &result)?;
+    let (yaml_path, graph_path) = write_outputs(&cli.out, result)?;
 
     println!("synthesis:    {}", yaml_path.display());
     println!("graph:        {}", graph_path.display());
@@ -264,7 +353,22 @@ async fn run_review_cmd(cli: &Cli, ctx: &LitContext) -> anyhow::Result<u8> {
         println!("\n=== NARRATIVE ===\n{}", result.narrative);
     }
 
-    Ok(exit_for(&result))
+    // Outputs are safely on disk: mark the run complete and delete its
+    // checkpoints. This runs for degraded-but-written results too (exit 2) —
+    // the files exist, and a user wanting a better result reruns fresh
+    // rather than resuming into the same degraded state. Only the empty-bail
+    // path above (and a write_outputs failure) leaves the run resumable.
+    // Finalisation failure is warn-and-continue: the outputs are already
+    // safe, and stale checkpoints are harmless.
+    if let Err(err) = finalize_run(ctx, &result.run_id).await {
+        tracing::warn!(
+            run_id = %result.run_id,
+            error = %err,
+            "failed to finalise run — outputs are written; checkpoints remain"
+        );
+    }
+
+    Ok(exit_for(result))
 }
 
 /// Write `synthesis.yaml` + `graph.md` into `out`, returning their paths.
@@ -328,6 +432,31 @@ mod tests {
                     .into();
             assert_eq!(parsed, scope);
         }
+    }
+
+    #[test]
+    fn cli_parses_resume_subcommand() {
+        let cli = Cli::try_parse_from(["espigue", "resume", "abc123"]).unwrap();
+        match cli.command {
+            Some(Command::Resume { ref run_id }) => assert_eq!(run_id, "abc123"),
+            other => panic!("expected Resume, got {other:?}"),
+        }
+        assert!(cli.question.is_none());
+    }
+
+    #[test]
+    fn cli_parses_resume_with_global_out() {
+        let cli =
+            Cli::try_parse_from(["espigue", "resume", "abc123", "--out", "somewhere"]).unwrap();
+        assert!(matches!(cli.command, Some(Command::Resume { .. })));
+        assert_eq!(cli.out, PathBuf::from("somewhere"));
+    }
+
+    #[test]
+    fn cli_still_parses_bare_question() {
+        let cli = Cli::try_parse_from(["espigue", "test-time compute scaling"]).unwrap();
+        assert!(cli.command.is_none());
+        assert_eq!(cli.question.as_deref(), Some("test-time compute scaling"));
     }
 
     fn result(synthesis_yaml: &str, degraded: bool) -> ReviewResult {
