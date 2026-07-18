@@ -464,10 +464,11 @@ async fn finish_review(cli: &Cli, ctx: &LitContext, result: &ReviewResult) -> an
 
     println!("synthesis:    {}", yaml_path.display());
     println!("graph:        {}", graph_path.display());
-    if result.degraded {
+    // Notices are self-prefixed by the pipeline ("⚠ Synthesis degraded: ..."
+    // or "⚠ Synthesis note: ..."), so print them verbatim. A note-only run
+    // (degraded == false, non-empty notice) is still clean — exit 0.
+    if !result.notice.is_empty() {
         println!("\n{}", result.notice);
-    } else if !result.notice.is_empty() {
-        println!("\nnote: {}", result.notice);
     }
     if !result.narrative.is_empty() {
         println!("\n=== NARRATIVE ===\n{}", result.narrative);
@@ -617,6 +618,17 @@ mod tests {
     #[test]
     fn exit_for_clean_is_0() {
         assert_eq!(exit_for(&result("claims: []", false)), EXIT_CLEAN);
+    }
+
+    /// Regression: a note-only run (non-empty synthesis, non-empty notice,
+    /// `degraded == false`) is clean and must exit 0. Exit 2 is reserved for
+    /// `degraded == true` with usable output — notices alone never degrade.
+    #[test]
+    fn exit_for_note_only_is_0() {
+        let mut r = result("claims: []", false);
+        r.notice =
+            "⚠ Synthesis note: topicality gate dropped 2 off-topic source(s)".to_string();
+        assert_eq!(exit_for(&r), EXIT_CLEAN);
     }
 
     #[test]

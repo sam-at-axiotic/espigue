@@ -195,7 +195,10 @@ pub struct ReviewResult {
     pub narrative: String,
     /// When true, the result is a partial/degraded synthesis.
     pub degraded: bool,
-    /// Human-readable degradation notice (empty when `degraded == false`).
+    /// Human-readable notice: a degradation (`⚠ Synthesis degraded: ...`,
+    /// `degraded == true`) or an informational note
+    /// (`⚠ Synthesis note: ...`, which can appear with `degraded == false`).
+    /// Empty when there is nothing to report.
     pub notice: String,
 }
 
@@ -1705,6 +1708,19 @@ const MAX_DEGRADATION_REASONS: usize = 3;
 ///   `"⚠ Synthesis degraded: ..."` notice.
 /// - Exact-duplicate reasons are dropped (order preserved); at most
 ///   [`MAX_DEGRADATION_REASONS`] are shown, then `" (and N more)"`.
+/// Fold a note-class notice (topicality gate, seed resolution) into the
+/// composed `(degraded, notice)` pair. Notes inform but never degrade:
+/// `degraded` passes through unchanged, so a note-only run still exits 0.
+/// A note starts a fresh `"⚠ Synthesis note: ..."` line only when nothing
+/// leads yet; otherwise it appends with the house `"; "` separator.
+fn fold_note(degraded: bool, notice: String, note: Option<String>) -> (bool, String) {
+    match note {
+        Some(n) if notice.is_empty() => (degraded, format!("⚠ Synthesis note: {n}")),
+        Some(n) => (degraded, format!("{notice}; {n}")),
+        None => (degraded, notice),
+    }
+}
+
 fn fold_engine_degradations(
     degraded: bool,
     notice: String,
@@ -1983,16 +1999,8 @@ async fn run_engine_and_finish(
         Some(c) => (degraded, format!("{notice}; {c}")),
         None => (degraded, notice),
     };
-    let (degraded, notice) = match topicality_notice {
-        Some(t) if !degraded => (true, format!("⚠ Synthesis note: {t}")),
-        Some(t) => (degraded, format!("{notice}; {t}")),
-        None => (degraded, notice),
-    };
-    let (degraded, notice) = match seed_notice {
-        Some(s) if !degraded => (true, format!("⚠ Synthesis note: {s}")),
-        Some(s) => (degraded, format!("{notice}; {s}")),
-        None => (degraded, notice),
-    };
+    let (degraded, notice) = fold_note(degraded, notice, topicality_notice);
+    let (degraded, notice) = fold_note(degraded, notice, seed_notice);
 
     tracing::info!(
         run_id = %run_id,
@@ -2581,5 +2589,47 @@ mod tests {
             fold_engine_degradations(true, "⚠ Synthesis degraded: x".into(), &[]);
         assert!(degraded);
         assert_eq!(notice, "⚠ Synthesis degraded: x");
+    }
+
+    // ── Note-class notices: inform, never degrade ─────────────────────────────
+
+    /// Regression: a note alone (topicality gate, seed resolution) must NOT
+    /// flip `degraded` — note-only runs are clean and exit 0.
+    #[test]
+    fn fold_note_never_flips_degraded() {
+        let (degraded, notice) = fold_note(
+            false,
+            String::new(),
+            Some("topicality gate dropped 2 off-topic source(s)".into()),
+        );
+        assert!(!degraded, "a note alone must not degrade the run");
+        assert!(
+            notice.starts_with("⚠ Synthesis note: "),
+            "a leading note takes the note prefix, got {notice:?}"
+        );
+        assert!(notice.contains("topicality gate dropped 2 off-topic source(s)"));
+    }
+
+    /// A note appends to an existing degraded notice without touching the flag.
+    #[test]
+    fn fold_note_appends_and_preserves_degraded() {
+        let prior = "⚠ Synthesis degraded: x".to_string();
+        let (degraded, notice) = fold_note(true, prior.clone(), Some("seed note".into()));
+        assert!(degraded, "an existing degraded flag passes through");
+        assert_eq!(notice, format!("{prior}; seed note"));
+
+        // No note → pure pass-through.
+        let (degraded, notice) = fold_note(false, String::new(), None);
+        assert!(!degraded);
+        assert!(notice.is_empty());
+    }
+
+    /// Two notes chain: the second appends to the first, still not degraded.
+    #[test]
+    fn fold_note_chains_notes_without_degrading() {
+        let (degraded, notice) = fold_note(false, String::new(), Some("topicality".into()));
+        let (degraded, notice) = fold_note(degraded, notice, Some("seed".into()));
+        assert!(!degraded);
+        assert_eq!(notice, "⚠ Synthesis note: topicality; seed");
     }
 }
